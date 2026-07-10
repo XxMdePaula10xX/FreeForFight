@@ -91,11 +91,18 @@ export function step(state: SimState, inputs: InputMap, dt: number): SimEvent[] 
     if (!disc.alive || disc.ghost) continue;
     const input = inputs.get(disc.playerId) ?? EMPTY_INPUT;
 
-    if (disc.reflectState === 'active' || disc.reflectState === 'recovery') {
-      // Immobile: no self-driven velocity. External impulses (push/collision)
-      // are applied afterwards and still move you — that's the recovery punish.
+    if (disc.reflectState === 'active') {
+      // Parry stance: fully planted, no residual motion.
       disc.vel.x = 0;
       disc.vel.y = 0;
+      continue;
+    }
+    if (disc.reflectState === 'recovery') {
+      // Can't self-propel, but a knockback taken here (push ×1.5, applied in
+      // phase C) must persist and launch you — so only decay by friction, never
+      // hard-zero. This is what makes a whiffed parry actually punishing.
+      disc.vel.x *= D.friction;
+      disc.vel.y *= D.friction;
       continue;
     }
 

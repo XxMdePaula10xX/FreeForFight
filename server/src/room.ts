@@ -2,6 +2,7 @@
 // machine that drives rounds and scoring. The room is the only source of truth.
 
 import { WebSocket } from 'ws';
+import { randomUUID } from 'node:crypto';
 import {
   TUNING,
   PLAYER_COLORS,
@@ -35,8 +36,9 @@ interface Player {
   disconnectedAtTick: number | null;
 }
 
-let nextId = 1;
-const genId = () => `p${nextId++}`;
+// Random, unguessable id. It doubles as the reconnect bearer token, so it must
+// NOT be sequential — otherwise anyone could hijack "p3" by guessing (PRD §6.6).
+const genId = () => randomUUID();
 
 export class Room {
   code: string;
@@ -91,8 +93,18 @@ export class Room {
     p.connected = true;
     p.socket = socket;
     p.disconnectedAtTick = null;
+    // The reconnecting client restarts its input sequence at 1, so clear the
+    // stored seq — otherwise setInput would reject every new input as stale.
+    p.lastInput = { seq: 0, dir: { x: 0, y: 0 }, push: false, reflect: false };
+    p.lastAppliedSeq = 0;
     this.touch();
     return p;
+  }
+
+  // Is this socket the player's current one? Guards against a late close event
+  // from a replaced (already-reconnected) socket flipping them offline.
+  isCurrentSocket(playerId: string, socket: WebSocket): boolean {
+    return this.players.get(playerId)?.socket === socket;
   }
 
   markDisconnected(playerId: string): void {
@@ -123,6 +135,12 @@ export class Room {
   anyoneConnected(): boolean {
     for (const p of this.players.values()) if (p.connected) return true;
     return false;
+  }
+
+  connectedCount(): number {
+    let n = 0;
+    for (const p of this.players.values()) if (p.connected) n++;
+    return n;
   }
 
   // ---- input -------------------------------------------------------------
@@ -209,10 +227,13 @@ export class Room {
         break;
     }
 
-    // If everyone bailed mid-match, fall back to lobby (PRD §9).
+    // If too few players are still connected mid-match, fall back to lobby
+    // (PRD §9: "sala vai a 1 jogador durante a partida → partida encerra").
+    // Count CONNECTED players so an idle disconnected disc can't keep a match
+    // alive or win a round by sitting still.
     if (
       (this.phase === 'playing' || this.phase === 'countdown') &&
-      this.players.size < TUNING.match.minPlayers
+      this.connectedCount() < TUNING.match.minPlayers
     ) {
       this.phase = 'lobby';
       this.broadcastRoomState();

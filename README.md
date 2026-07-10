@@ -10,6 +10,9 @@ Duas ações com cooldown: **Empurrar** e **Refletir**. Refletir na hora certa
 devolve o empurrão com juros; na hora errada te deixa meio segundo parado, perto
 de uma borda que está encolhendo. O confronto é leitura mútua — em 200 ms.
 
+Modos: **online** (salas por código, 2–4 jogadores) e **solo** (você + 1 a 3
+lutadores de IA), este último 100% offline — o que torna o app jogável sem rede.
+
 ---
 
 ## Rodar
@@ -51,6 +54,13 @@ npm run dev:client   # cliente Vite em :5173
 Abra `http://localhost:5173`, crie uma sala, e abra o link em outra aba/dispositivo.
 Para simular latência (útil para testar predição): `http://localhost:5173/?lat=120`.
 
+Na tela inicial há também **"Jogar sozinho"**: escolha 1–3 IAs e a dificuldade
+(Fácil / Médio / Difícil) e jogue offline contra bots. A IA vive em
+[`client/src/ai.ts`](client/src/ai.ts) e o motor local (que reusa a física
+compartilhada) em [`client/src/local.ts`](client/src/local.ts). Os bots se
+preservam da borda, caçam o oponente mais próximo, só empurram quando o recuo
+os joga pra dentro, e refletem com parcimônia (pra não travar a partida).
+
 ### 3. Produção (serviço único)
 
 O servidor também serve o cliente compilado, então tudo roda numa porta só:
@@ -71,9 +81,46 @@ fly launch   # usa o Dockerfile e o fly.toml (WebSocket no free tier)
 ### Testes e checagem de tipos
 
 ```bash
-npm test         # física determinística (17 asserções)
+npm test         # física determinística (19 asserções)
 npm run typecheck
 ```
+
+---
+
+## Empacotar para a App Store (Capacitor)
+
+O cliente já está configurado como app iOS via **Capacitor**
+([`client/capacitor.config.ts`](client/capacitor.config.ts)). O projeto nativo
+`ios/` é gerado na sua máquina (precisa de **macOS + Xcode + CocoaPods**) — ele
+não é versionado; você o regenera.
+
+```bash
+cd client
+npm run build                 # gera dist/ (defina VITE_WS_URL p/ online, veja abaixo)
+npm run cap:add:ios           # cria client/ios/ (uma vez)
+npm run cap:sync              # build + copia web pro projeto nativo
+npm run cap:assets            # gera ícones/splash a partir de client/assets/
+npm run cap:open              # abre o Xcode
+```
+
+No Xcode: selecione seu *Team* de assinatura, ajuste o *Bundle Identifier*
+(`com.matheus.octogono`), e *Archive → Distribute App* para o TestFlight/App Store.
+
+- **Ícone e splash**: fontes prontas em [`client/assets/`](client/assets)
+  (`icon-only.png` 1024², `splash.png`/`splash-dark.png` 2732²). O
+  `cap:assets` (`@capacitor/assets`) gera todos os tamanhos que a Apple exige.
+- **Notch / safe-area**: a UI respeita `env(safe-area-inset-*)`; o canvas é
+  full-bleed e o placar é deslocado pela inset do topo.
+- **Solo funciona offline** sem qualquer configuração. Para habilitar o **online
+  no app**, faça o build apontando pro seu servidor implantado:
+
+  ```bash
+  VITE_WS_URL="wss://seu-servidor" npm run build && npm run cap:sync
+  ```
+
+**CI**: [`codemagic.yaml`](codemagic.yaml) tem um workflow que faz build, assina
+e publica no TestFlight — configure os grupos de assinatura/App Store Connect no
+painel do Codemagic (como no PRD).
 
 ---
 

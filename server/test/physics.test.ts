@@ -111,6 +111,26 @@ function snapshot(s: SimState): string {
   assert(s.discs[0].reflectState === 'recovery', 'active -> recovery after window');
 }
 
+// ---- 5b. a whiffed parry (recovery) actually gets punished -----------------
+{
+  const s = fresh(2);
+  s.discs[1].pos.x = 40; // b within push reach of a
+  // put b into recovery
+  s.discs[1].reflectState = 'recovery';
+  s.discs[1].reflectUntil = 999;
+  const seq: InputMap = new Map([
+    ['a', input({ push: true })],
+    ['b', input()],
+  ]);
+  step(s, seq, 1 / 60);
+  const v1 = Math.hypot(s.discs[1].vel.x, s.discs[1].vel.y);
+  assert(s.discs[1].vel.x > 0 && v1 > 5, 'recovery disc is launched by the counter-push');
+  // and the knockback persists (decays, not hard-zeroed) on the next tick
+  const before = s.discs[1].pos.x;
+  step(s, new Map([['a', input()], ['b', input()]]), 1 / 60);
+  assert(s.discs[1].pos.x > before, 'knockback carries the recovery disc further next tick');
+}
+
 // ---- 6. arena shrink & elimination -----------------------------------------
 {
   assert(arenaRadiusAt(0, 0) === TUNING.arena.startRadius, 'arena starts at startRadius');

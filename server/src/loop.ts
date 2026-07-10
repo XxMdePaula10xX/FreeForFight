@@ -57,8 +57,11 @@ export class GameLoop {
         this.emptySince.set(code, now);
       }
       const emptyFor = this.emptySince.has(code) ? now - this.emptySince.get(code)! : 0;
-      const idleFor = now - room.lastActivity;
-      if (emptyFor > EMPTY_ROOM_TTL_MS || idleFor > IDLE_ROOM_TTL_MS) {
+      // Destroy a room only once nobody is connected. A room with live players
+      // is never reaped, even if idle in the lobby — that would yank it out
+      // from under them. (Disconnected-and-empty rooms die after EMPTY_ROOM_TTL;
+      // truly abandoned ones can also exceed IDLE_ROOM_TTL while empty.)
+      if (!connected && (emptyFor > EMPTY_ROOM_TTL_MS || now - room.lastActivity > IDLE_ROOM_TTL_MS)) {
         this.rooms.delete(code);
         this.emptySince.delete(code);
       }

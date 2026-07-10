@@ -1,5 +1,7 @@
-// Client entry point: screen flow (home -> lobby -> match -> end), the render
-// loop, and the fixed-step input pump that feeds prediction.
+// Client entry point: screen flow (home -> lobby/solo -> match -> end), the
+// render loop, and the fixed-step pump. Two drivers share the same renderer:
+//   - NetClient  : online, server-authoritative (prediction/reconciliation)
+//   - LocalGame  : offline single-player vs AI (runs the sim locally)
 
 import '@fontsource/archivo-black';
 import '@fontsource-variable/archivo';
@@ -7,9 +9,12 @@ import '@fontsource/jetbrains-mono/500.css';
 import '@fontsource/jetbrains-mono/700.css';
 import './style.css';
 import { NetClient } from './net';
+import { LocalGame } from './local';
+import type { Difficulty } from './ai';
 import { InputController } from './input';
 import { Effects } from './effects';
 import { Renderer } from './render';
+import { initNative } from './native';
 import { TUNING, MAX_ROUND_TICKS } from '../../shared/tuning';
 import type { PlayerInfo, Phase } from '../../shared/protocol';
 
@@ -22,11 +27,7 @@ const WS_URL =
 
 // ---- DOM refs --------------------------------------------------------------
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as T;
-const screens = {
-  home: $('#home'),
-  lobby: $('#lobby'),
-  end: $('#end'),
-};
+const screens = { home: $('#home'), lobby: $('#lobby'), end: $('#end') };
 const hud = $('#hud');
 const canvas = $('#game') as HTMLCanvasElement;
 
@@ -34,6 +35,9 @@ const nickInput = $('#nick') as HTMLInputElement;
 const codeInput = $('#code') as HTMLInputElement;
 const btnCreate = $('#btnCreate');
 const btnJoin = $('#btnJoin');
+const btnSolo = $('#btnSolo');
+const segBots = $('#segBots');
+const segDiff = $('#segDiff');
 const homeError = $('#homeError');
 
 const lobbyCode = $('#lobbyCode');
@@ -45,6 +49,7 @@ const lobbyHint = $('#lobbyHint');
 const endTitle = $('#endTitle');
 const endScores = $('#endScores');
 const btnAgain = $('#btnAgain') as HTMLButtonElement;
+const btnMenu = $('#btnMenu');
 
 function showScreen(name: 'home' | 'lobby' | 'match' | 'end'): void {
   screens.home.classList.toggle('hidden', name !== 'home');
@@ -55,67 +60,71 @@ function showScreen(name: 'home' | 'lobby' | 'match' | 'end'): void {
 }
 
 // ---- state -----------------------------------------------------------------
-let net: NetClient;
-let scores: Record<string, number> = {};
-let countdownEnd = 0;
-let roundWinnerId: string | null = null;
-let matchWinnerId: string | null = null;
+type Mode = 'online' | 'local' | null;
+let mode: Mode = null;
+let net: NetClient | null = null;
+let local: LocalGame | null = null;
+let scores: Record<string, number> = {}; // online scores (from server messages)
+let countdownEnd = 0; // online countdown (ms)
+let roundWinnerId: string | null = null; // online
+let matchWinnerId: string | null = null; // online
+let endShown = false;
 
 const effects = new Effects();
 const renderer = new Renderer(canvas);
 const inputCtl = new InputController(document.body);
+
+// safe-area top inset (iOS notch) so the scoreboard clears the status bar
+const probe = document.createElement('div');
+probe.style.cssText = 'position:fixed;top:0;left:0;width:0;height:env(safe-area-inset-top,0px);';
+document.body.appendChild(probe);
+renderer.safeTop = probe.offsetHeight || 0;
 
 // ---- boot ------------------------------------------------------------------
 const params = new URLSearchParams(location.search);
 const preCode = params.get('sala');
 if (preCode) codeInput.value = preCode.toUpperCase();
 nickInput.value = sessionStorage.getItem('octogono_nick') ?? '';
+const lagMs = Number(params.get('lat')) || 0; // ?lat=120 simulates 120ms latency
 
-const lagMs = Number(params.get('lat')) || 0; // ?lat=120 simulates 120ms one-way latency
-
+// ---- online (NetClient) ----------------------------------------------------
 function makeNet(): NetClient {
-  const n = new NetClient(WS_URL, {
-    onJoined: () => {
-      sessionStorage.setItem('octogono_nick', nickInput.value);
+  const n = new NetClient(
+    WS_URL,
+    {
+      onJoined: () => sessionStorage.setItem('octogono_nick', nickInput.value),
+      onError: (m) => showHomeError(m),
+      onRoomState: (code, phase, players, hostId) => {
+        renderLobby(code, players, hostId);
+        if (phase === 'lobby' || phase === 'match_end') {
+          if (!screens.end.classList.contains('hidden') && phase === 'match_end') return;
+          showScreen('lobby');
+        }
+      },
+      onCountdown: (_idx, startsInMs) => {
+        countdownEnd = performance.now() + startsInMs;
+        roundWinnerId = null;
+        showScreen('match');
+      },
+      onMatchStarted: () => showScreen('match'),
+      onRoundEnded: (winnerId, sc) => {
+        roundWinnerId = winnerId;
+        scores = sc;
+      },
+      onMatchEnded: (winnerId, sc) => {
+        matchWinnerId = winnerId;
+        scores = sc;
+        showEnd();
+      },
+      onEvent: (e) => effects.handle(e, (id) => net!.colorOf(id), performance.now()),
+      onPhase: () => {},
     },
-    onError: (m) => {
-      homeError.textContent = m;
-      homeError.classList.remove('hidden');
-    },
-    onRoomState: (code, phase, players, hostId) => {
-      renderLobby(code, players, hostId);
-      if (phase === 'lobby' || phase === 'match_end') {
-        if (!screens.end.classList.contains('hidden') && phase === 'match_end') return;
-        showScreen('lobby');
-      }
-    },
-    onCountdown: (_idx, startsInMs) => {
-      countdownEnd = performance.now() + startsInMs;
-      roundWinnerId = null;
-      showScreen('match');
-    },
-    onMatchStarted: () => {
-      showScreen('match');
-    },
-    onRoundEnded: (winnerId, sc) => {
-      roundWinnerId = winnerId;
-      scores = sc;
-    },
-    onMatchEnded: (winnerId, sc) => {
-      matchWinnerId = winnerId;
-      scores = sc;
-      showEnd();
-    },
-    onEvent: (e) => {
-      effects.handle(e, (id) => net.colorOf(id), performance.now());
-    },
-    onPhase: () => {},
-  }, lagMs);
-  (window as any).__net = n; // debug hook for smoke tests / manual inspection
+    lagMs,
+  );
+  (window as any).__net = n;
   return n;
 }
 
-// ---- home actions ----------------------------------------------------------
 async function ensureConnected(): Promise<boolean> {
   homeError.classList.add('hidden');
   if (!net) net = makeNet();
@@ -123,31 +132,61 @@ async function ensureConnected(): Promise<boolean> {
     await net.connect();
     return true;
   } catch {
-    homeError.textContent = 'Não foi possível conectar ao servidor.';
-    homeError.classList.remove('hidden');
+    showHomeError('Não foi possível conectar ao servidor.');
     return false;
   }
+}
+function showHomeError(m: string): void {
+  homeError.textContent = m;
+  homeError.classList.remove('hidden');
 }
 
 btnCreate.addEventListener('click', async () => {
   if (!nickInput.value.trim()) return flagNick();
-  if (await ensureConnected()) net.createRoom(nickInput.value);
+  if (await ensureConnected()) {
+    mode = 'online';
+    net!.createRoom(nickInput.value);
+  }
 });
 btnJoin.addEventListener('click', async () => {
   if (!nickInput.value.trim()) return flagNick();
   const code = codeInput.value.trim().toUpperCase();
-  if (code.length !== 4) {
-    homeError.textContent = 'O código tem 4 letras.';
-    homeError.classList.remove('hidden');
-    return;
+  if (code.length !== 4) return showHomeError('O código tem 4 letras.');
+  if (await ensureConnected()) {
+    mode = 'online';
+    net!.joinRoom(nickInput.value, code);
   }
-  if (await ensureConnected()) net.joinRoom(nickInput.value, code);
 });
 function flagNick(): void {
   nickInput.focus();
   nickInput.classList.add('shake');
   setTimeout(() => nickInput.classList.remove('shake'), 400);
 }
+
+// ---- solo (LocalGame) ------------------------------------------------------
+let selBots = 2;
+let selDiff: Difficulty = 'normal';
+segChoose(segBots, (b) => (selBots = Number(b)));
+segChoose(segDiff, (d) => (selDiff = d as Difficulty));
+
+function segChoose(group: HTMLElement, set: (v: string) => void): void {
+  group.querySelectorAll('button').forEach((b) =>
+    b.addEventListener('click', () => {
+      group.querySelectorAll('button').forEach((x) => x.classList.remove('on'));
+      b.classList.add('on');
+      set((b.dataset.b ?? b.dataset.d)!);
+    }),
+  );
+}
+
+btnSolo.addEventListener('click', () => {
+  mode = 'local';
+  if (!local) local = new LocalGame();
+  endShown = false;
+  local.start(selBots, selDiff);
+  (window as any).__local = local; // debug hook for smoke tests
+  showScreen('match');
+});
 
 // ---- lobby -----------------------------------------------------------------
 function renderLobby(code: string, players: PlayerInfo[], _hostId: string): void {
@@ -161,19 +200,19 @@ function renderLobby(code: string, players: PlayerInfo[], _hostId: string): void
       ${p.connected ? '' : '<span class="off">offline</span>'}`;
     lobbyPlayers.appendChild(li);
   }
-  const canStart = net.isHost && players.length >= TUNING.match.minPlayers;
-  btnStart.classList.toggle('hidden', !net.isHost);
+  const canStart = net!.isHost && players.length >= TUNING.match.minPlayers;
+  btnStart.classList.toggle('hidden', !net!.isHost);
   btnStart.disabled = !canStart;
-  lobbyHint.textContent = net.isHost
+  lobbyHint.textContent = net!.isHost
     ? players.length < 2
       ? 'Aguardando pelo menos 2 jogadores…'
       : 'Tudo pronto. Empurre-os pra fora.'
     : 'Aguardando o host começar…';
 }
 
-btnStart.addEventListener('click', () => net.startMatch());
+btnStart.addEventListener('click', () => net?.startMatch());
 btnCopy.addEventListener('click', async () => {
-  const link = `${location.origin}${location.pathname}?sala=${net.code}`;
+  const link = `${location.origin}${location.pathname}?sala=${net?.code ?? ''}`;
   try {
     await navigator.clipboard.writeText(link);
     btnCopy.textContent = 'Copiado!';
@@ -185,17 +224,42 @@ btnCopy.addEventListener('click', async () => {
 
 // ---- match end -------------------------------------------------------------
 function showEnd(): void {
-  const w = matchWinnerId;
+  endShown = true;
+  const isLocal = mode === 'local';
+  const src = isLocal ? local! : net!;
+  const w = isLocal ? local!.matchWinnerId : matchWinnerId;
+  const sc = isLocal ? local!.scores : scores;
   endTitle.innerHTML = w
-    ? `<span style="color:${net.colorOf(w)}">${escapeHtml(net.nicknameOf(w))}</span> venceu`
+    ? `<span style="color:${src.colorOf(w)}">${escapeHtml(src.nicknameOf(w))}</span> venceu`
     : 'Fim de partida';
-  endScores.innerHTML = net.players
-    .map((p) => `<div><span class="dot" style="background:${p.color};color:${p.color}"></span> ${escapeHtml(p.nickname)} — <b>${scores[p.id] ?? 0}</b></div>`)
+  endScores.innerHTML = src.players
+    .map(
+      (p) =>
+        `<div><span class="dot" style="background:${p.color};color:${p.color}"></span> ${escapeHtml(p.nickname)} — <b>${sc[p.id] ?? 0}</b></div>`,
+    )
     .join('');
-  btnAgain.classList.toggle('hidden', !net.isHost);
+  const canAgain = isLocal ? true : net!.isHost;
+  btnAgain.classList.toggle('hidden', !canAgain);
   showScreen('end');
 }
-btnAgain.addEventListener('click', () => net.playAgain());
+btnAgain.addEventListener('click', () => {
+  if (mode === 'local' && local) {
+    endShown = false;
+    local.playAgain();
+    showScreen('match');
+  } else {
+    net?.playAgain();
+  }
+});
+btnMenu.addEventListener('click', () => {
+  if (mode === 'online') {
+    location.reload(); // cleanly leave the room
+  } else {
+    mode = null;
+    local = null;
+    showScreen('home');
+  }
+});
 
 // ---- game loop -------------------------------------------------------------
 let acc = 0;
@@ -208,40 +272,68 @@ function loop(now: number): void {
   last = now;
   if (dt > 250) dt = 250;
 
-  // fixed-step input pump (prediction runs at 60Hz)
-  if (net && net.phase === 'playing') {
+  // Fixed-step pump, capped so a post-stall catch-up can't burst past the
+  // server's input rate limit (or over-run the local sim).
+  const MAX_STEPS = 4;
+  if (mode === 'online' && net && net.phase === 'playing') {
     acc += dt;
-    while (acc >= STEP) {
+    let n = 0;
+    while (acc >= STEP && n < MAX_STEPS) {
       const s = inputCtl.sample();
       net.applyLocalInput({ dir: s.dir, push: s.push, reflect: s.reflect });
       acc -= STEP;
+      n++;
     }
+    if (acc > STEP * MAX_STEPS) acc = 0;
+  } else if (mode === 'local' && local && local.phase !== 'match_end') {
+    if (effects.isFrozen(now)) {
+      acc = 0; // hitstop: freeze the local sim briefly so a parry lands hard
+    } else {
+      acc += dt;
+      let n = 0;
+      while (acc >= STEP && n < MAX_STEPS) {
+        const s = inputCtl.sample();
+        const events = local.step({ dir: s.dir, push: s.push, reflect: s.reflect });
+        for (const e of events) effects.handle(e, (id) => local!.colorOf(id), now);
+        acc -= STEP;
+        n++;
+        if (local.isMatchOver) break;
+      }
+      if (acc > STEP * MAX_STEPS) acc = 0;
+    }
+    if (local.isMatchOver && !endShown) showEnd();
   } else {
     acc = 0;
   }
 
-  if (net && net.phase !== 'lobby' && net.phase !== 'match_end') render(now);
+  const drawing =
+    (mode === 'online' && net && net.phase !== 'lobby' && net.phase !== 'match_end') ||
+    (mode === 'local' && local);
+  if (drawing) render(now);
   effects.update(dt / 1000);
 }
 
 function render(now: number): void {
-  const discs = net.getRenderDiscs(now);
-  const roundElapsed = net.clientTick - net.roundStartTick;
-  const roundTimeLeft = Math.max(0, (MAX_ROUND_TICKS - roundElapsed) / 60);
-  const countdownLeft = Math.max(0, (countdownEnd - now) / 1000);
+  const isLocal = mode === 'local';
+  const src = isLocal ? local! : net!;
+  const discs = src.getRenderDiscs(now);
+  const roundTimeLeft = Math.max(0, (MAX_ROUND_TICKS - (src.clientTick - src.roundStartTick)) / 60);
+  const countdownLeft = isLocal
+    ? Math.max(0, (src.roundStartTick - src.clientTick) / 60)
+    : Math.max(0, (countdownEnd - now) / 1000);
   renderer.draw(
     {
       discs,
-      arenaRadius: net.arenaRadius,
-      clientTick: net.clientTick,
-      phase: net.phase as Phase,
-      players: net.players,
-      selfId: net.playerId,
-      scores,
+      arenaRadius: src.arenaRadius,
+      clientTick: src.clientTick,
+      phase: src.phase as Phase,
+      players: src.players,
+      selfId: src.playerId,
+      scores: isLocal ? local!.scores : scores,
       countdownLeft,
       roundTimeLeft,
-      roundWinnerId,
-      matchWinnerId,
+      roundWinnerId: isLocal ? local!.roundWinnerId : roundWinnerId,
+      matchWinnerId: isLocal ? local!.matchWinnerId : matchWinnerId,
     },
     effects,
     now,
@@ -250,9 +342,11 @@ function render(now: number): void {
 
 requestAnimationFrame(loop);
 showScreen('home');
+void initNative();
 
 function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (c) =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!,
+  return s.replace(
+    /[&<>"']/g,
+    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!,
   );
 }

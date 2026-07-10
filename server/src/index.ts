@@ -105,7 +105,9 @@ wss.on('connection', (socket) => {
   socket.on('close', () => {
     if (conn.roomCode && conn.playerId) {
       const room = loop.rooms.get(conn.roomCode);
-      if (room) {
+      // Only mark offline if THIS socket is still the player's current one —
+      // a reconnect may already have swapped in a newer socket.
+      if (room && room.isCurrentSocket(conn.playerId, socket)) {
         room.markDisconnected(conn.playerId);
         room.broadcastRoomState();
       }

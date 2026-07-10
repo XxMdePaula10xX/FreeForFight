@@ -30,6 +30,22 @@
         <input id="code" maxlength="4" placeholder="CÓDIGO" autocomplete="off" />
         <button id="btnJoin">Entrar</button>
       </div>
+
+      <div class="divider"><span>ou treine sozinho</span></div>
+      <div class="solo">
+        <div class="seg" id="segBots" role="group" aria-label="quantidade de IA">
+          <button type="button" data-b="1">1 IA</button>
+          <button type="button" data-b="2" class="on">2 IA</button>
+          <button type="button" data-b="3">3 IA</button>
+        </div>
+        <div class="seg" id="segDiff" role="group" aria-label="dificuldade">
+          <button type="button" data-d="easy">Fácil</button>
+          <button type="button" data-d="normal" class="on">Médio</button>
+          <button type="button" data-d="hard">Difícil</button>
+        </div>
+        <button id="btnSolo" class="solo-btn">Jogar sozinho</button>
+      </div>
+
       <p id="homeError" class="error hidden"></p>
     </div>
   </section>
@@ -54,6 +70,7 @@
       <h2 id="endTitle">Fim de partida</h2>
       <div id="endScores" class="endscores"></div>
       <button id="btnAgain" class="primary hidden">Jogar de novo</button>
+      <button id="btnMenu" class="ghost">Menu</button>
     </div>
   </section>
 

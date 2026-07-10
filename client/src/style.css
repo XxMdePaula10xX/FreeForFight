@@ -79,7 +79,10 @@ html, body {
 /* ---------- screens & panels ---------- */
 .screen {
   position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
-  padding: 20px; z-index: 10;
+  z-index: 10;
+  padding: calc(20px + env(safe-area-inset-top)) calc(20px + env(safe-area-inset-right))
+           calc(20px + env(safe-area-inset-bottom)) calc(20px + env(safe-area-inset-left));
+  overflow-y: auto;
 }
 .screen.hidden, .hidden { display: none !important; }
 .panel {
@@ -151,6 +154,21 @@ button.ghost { border-color: var(--line); font-size: 12px; padding: 9px 16px; wi
 .join button { width: auto; white-space: nowrap; margin: 0; padding: 14px 18px; }
 .error { color: var(--perigo); font-size: 13px; margin-top: 12px; font-family: var(--mono); }
 
+/* ---------- solo vs AI ---------- */
+.divider { display: flex; align-items: center; gap: 12px; margin: 22px 0 14px; color: var(--ink-3);
+  font-size: 10.5px; letter-spacing: 0.2em; text-transform: uppercase; font-family: var(--mono); }
+.divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+.solo { display: flex; flex-direction: column; gap: 9px; }
+.seg { display: flex; gap: 6px; }
+.seg button { flex: 1; margin: 0; padding: 11px 8px; font-size: 12px; font-weight: 800; letter-spacing: 0.03em;
+  background: rgba(9, 8, 12, 0.5); border: 1.5px solid var(--line); border-radius: 10px; }
+.seg button.on { border-color: var(--reflexo); background: rgba(77, 216, 255, 0.12); color: var(--marca);
+  box-shadow: inset 0 0 0 1px rgba(77, 216, 255, 0.35); }
+.solo-btn { background: linear-gradient(135deg, #7ee6ff, #4dd8ff 60%, #2bb8e6); border-color: transparent;
+  color: #08222b; letter-spacing: 0.1em;
+  box-shadow: 0 10px 30px -8px rgba(77, 216, 255, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.4); }
+.solo-btn:hover:not(:disabled) { filter: brightness(1.08); background: linear-gradient(135deg, #7ee6ff, #4dd8ff 60%, #2bb8e6); color: #08222b; }
+
 .code {
   font-family: var(--display); font-size: clamp(52px, 15vw, 78px); font-weight: 900;
   letter-spacing: 0.16em; margin: 8px 0 14px; padding-left: 0.16em;
@@ -187,7 +205,8 @@ button.ghost { border-color: var(--line); font-size: 12px; padding: 9px 16px; wi
   border-radius: 50%; background: rgba(245, 242, 232, 0.9); transform: translate(-50%, -50%);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
 }
-.buttons { position: absolute; right: 26px; bottom: 38px; display: flex; flex-direction: column;
+.buttons { position: absolute; right: calc(26px + env(safe-area-inset-right));
+  bottom: calc(38px + env(safe-area-inset-bottom)); display: flex; flex-direction: column;
   align-items: center; gap: 20px; pointer-events: none; }
 .btn {
   pointer-events: auto; display: flex; align-items: center; justify-content: center;

@@ -51,6 +51,7 @@ export class Renderer {
   scale = 1;
   cx = 0;
   cy = 0;
+  safeTop = 0; // iOS status-bar / notch inset so the scoreboard clears it
   private anim = new Map<string, AnimState>();
   private lastNow = performance.now();
 
@@ -427,6 +428,7 @@ export class Renderer {
     const gap = Math.min(180, (this.W - 40) / n);
     const total = (n - 1) * gap;
     let x = this.W / 2 - total / 2;
+    const top = this.safeTop;
     ctx.font = "700 14px 'Archivo Variable', 'Archivo Black', system-ui, sans-serif";
     for (const p of players) {
       const disc = input.discs.find((d) => d.playerId === p.id);
@@ -434,7 +436,7 @@ export class Renderer {
       ctx.globalAlpha = alive || input.phase !== 'playing' ? 1 : 0.4;
       // colour token
       ctx.beginPath();
-      ctx.arc(x - 52, 26, 7, 0, Math.PI * 2);
+      ctx.arc(x - 52, top + 26, 7, 0, Math.PI * 2);
       ctx.fillStyle = p.color;
       ctx.shadowColor = p.color;
       ctx.shadowBlur = alive && input.phase === 'playing' ? 10 : 0;
@@ -443,11 +445,11 @@ export class Renderer {
       ctx.fillStyle = p.id === input.selfId ? C.marca : '#c7c2d2';
       ctx.textAlign = 'left';
       const score = input.scores[p.id] ?? p.score ?? 0;
-      ctx.fillText(p.nickname, x - 40, 20);
+      ctx.fillText(p.nickname, x - 40, top + 20);
       // score pips
       ctx.font = "800 13px 'JetBrains Mono', monospace";
       ctx.fillStyle = p.color;
-      ctx.fillText('◆'.repeat(score) + '◇'.repeat(Math.max(0, TUNING.match.scoreToWin - score)), x - 40, 34);
+      ctx.fillText('◆'.repeat(score) + '◇'.repeat(Math.max(0, TUNING.match.scoreToWin - score)), x - 40, top + 34);
       ctx.font = "700 14px 'Archivo Variable', 'Archivo Black', system-ui, sans-serif";
       ctx.globalAlpha = 1;
       x += gap;

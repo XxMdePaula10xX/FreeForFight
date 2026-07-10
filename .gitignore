@@ -5,3 +5,10 @@ dist/
 .env
 .env.local
 client/dist/
+
+# Capacitor native projects are generated on macOS via `npx cap add ios`.
+# Regenerate rather than commit; only the web + config are tracked here.
+client/ios/
+client/android/
+.gradle/
+DerivedData/

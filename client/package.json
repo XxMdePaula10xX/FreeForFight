@@ -7,13 +7,21 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "cap:add:ios": "cap add ios",
+    "cap:sync": "npm run build && cap sync ios",
+    "cap:assets": "capacitor-assets generate --ios",
+    "cap:open": "cap open ios"
   },
   "devDependencies": {
+    "@capacitor/cli": "^6.2.1",
+    "@capacitor/ios": "^6.2.1",
     "typescript": "^5.7.2",
     "vite": "^5.4.11"
   },
   "dependencies": {
+    "@capacitor/core": "^6.2.1",
+    "@capacitor/status-bar": "^6.0.3",
     "@fontsource-variable/archivo": "^5.2.8",
     "@fontsource/archivo-black": "^5.2.8",
     "@fontsource/jetbrains-mono": "^5.2.8"

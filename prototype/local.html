@@ -176,7 +176,8 @@ function step() {
   }
   for (const disc of state.discs) {
     if (!disc.alive || disc.ghost) continue; const inp = inputs[disc.id];
-    if (disc.reflectState === 'active' || disc.reflectState === 'recovery') { disc.vel.x = 0; disc.vel.y = 0; continue; }
+    if (disc.reflectState === 'active') { disc.vel.x = 0; disc.vel.y = 0; continue; }
+    if (disc.reflectState === 'recovery') { disc.vel.x *= D.friction; disc.vel.y *= D.friction; continue; } // knockback persists & decays — whiffed parry punish
     const dir = normalize(inp.dir);
     disc.vel.x += dir.x * D.accel * DT; disc.vel.y += dir.y * D.accel * DT;
     const sp = Math.hypot(disc.vel.x, disc.vel.y); if (sp > D.maxSpeed) { const s = D.maxSpeed/sp; disc.vel.x*=s; disc.vel.y*=s; }
