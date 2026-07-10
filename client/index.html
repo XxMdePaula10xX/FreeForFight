@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#0d0b0f" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230d0b0f'/%3E%3Cpolygon points='11,5 21,5 27,11 27,21 21,27 11,27 5,21 5,11' fill='none' stroke='%23ff4d2e' stroke-width='2.5'/%3E%3C/svg%3E" />
+  <title>Octógono</title>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <!-- HOME -->
+  <section id="home" class="screen hidden">
+    <div class="panel">
+      <h1>Octógono<span class="sub">sumô eletrônico</span></h1>
+      <p class="tag">Empurre os outros pra fora. A arena encolhe. Reflita na hora certa.</p>
+      <input id="nick" maxlength="12" placeholder="seu apelido" autocomplete="off" />
+      <button id="btnCreate" class="primary">Criar sala</button>
+      <div class="join">
+        <input id="code" maxlength="4" placeholder="CÓDIGO" autocomplete="off" />
+        <button id="btnJoin">Entrar</button>
+      </div>
+      <p id="homeError" class="error hidden"></p>
+    </div>
+  </section>
+
+  <!-- LOBBY -->
+  <section id="lobby" class="screen hidden">
+    <div class="panel">
+      <p class="label">código da sala</p>
+      <div id="lobbyCode" class="code">····</div>
+      <button id="btnCopy" class="ghost">Copiar link</button>
+      <ul id="lobbyPlayers" class="players"></ul>
+      <p class="explain">Um stick, dois botões: <b>Empurrar</b> (empurra quem está perto) e
+        <b>Refletir</b> (janela curta que devolve o empurrão — errar te deixa parado).</p>
+      <button id="btnStart" class="primary hidden">Começar</button>
+      <p id="lobbyHint" class="hint"></p>
+    </div>
+  </section>
+
+  <!-- MATCH END -->
+  <section id="end" class="screen hidden">
+    <div class="panel">
+      <h2 id="endTitle">Fim de partida</h2>
+      <div id="endScores" class="endscores"></div>
+      <button id="btnAgain" class="primary hidden">Jogar de novo</button>
+    </div>
+  </section>
+
+  <!-- MOBILE HUD (touch controls) -->
+  <div id="hud" class="hidden">
+    <div id="joyZone" class="joyzone">
+      <div id="joyBase" class="joybase"><div id="joyStick" class="joystick"></div></div>
+    </div>
+    <div class="buttons">
+      <div id="reflectBtn" class="btn reflect">↺</div>
+      <div id="pushBtn" class="btn push">➤</div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
