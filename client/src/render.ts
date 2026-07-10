@@ -1,11 +1,13 @@
-// Canvas 2D renderer. No engine — ~6 shapes on screen. The subject is impact;
-// the signature is the shrinking border (a chalk line erased, a red line
-// advancing over the tatame, the floor falling into the void). See PRD §8.
+// Canvas 2D renderer. The subject is impact; the signature is the shrinking
+// border (chalk erased, a red line advancing over the tatame, the floor falling
+// into the void). Now with: an atmospheric lit dojo floor, wood planks, a centre
+// emblem, top-down sumô fighters, dust/sparks/embers, and screen shake.
 
 import { TUNING, PLAYER_COLORS } from '../../shared/tuning';
 import { vertices } from '../../shared/octagon';
 import type { RenderDisc } from './net';
 import type { Effects } from './effects';
+import { drawFighter, drawGhostFighter, shade } from './sprites';
 import type { PlayerInfo, Phase } from '../../shared/protocol';
 
 const C = {
@@ -18,6 +20,7 @@ const C = {
 
 const PUSH_CD_TICKS = Math.round((TUNING.push.cooldown / 1000) * 60);
 const REFLECT_CD_TICKS = Math.round((TUNING.reflect.cooldown / 1000) * 60);
+const PUSH_ANIM_TICKS = Math.round((TUNING.push.duration / 1000) * 60);
 
 export interface RenderInput {
   discs: RenderDisc[];
@@ -27,10 +30,16 @@ export interface RenderInput {
   players: PlayerInfo[];
   selfId: string;
   scores: Record<string, number>;
-  countdownLeft: number; // seconds, only in countdown
-  roundTimeLeft: number; // seconds, only while playing
+  countdownLeft: number;
+  roundTimeLeft: number;
   roundWinnerId: string | null;
   matchWinnerId: string | null;
+}
+
+interface AnimState {
+  facing: number;
+  walkPhase: number;
+  push: number;
 }
 
 export class Renderer {
@@ -42,6 +51,8 @@ export class Renderer {
   scale = 1;
   cx = 0;
   cy = 0;
+  private anim = new Map<string, AnimState>();
+  private lastNow = performance.now();
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -82,13 +93,113 @@ export class Renderer {
 
   draw(input: RenderInput, effects: Effects, now: number): void {
     const ctx = this.ctx;
+    const dt = Math.min(0.05, (now - this.lastNow) / 1000);
+    this.lastNow = now;
+
+    // full-screen void (never shakes, so edges stay black)
     ctx.fillStyle = C.void;
     ctx.fillRect(0, 0, this.W, this.H);
 
+    // screen shake offset for the arena layer
+    const sh = effects.shake;
+    const shx = sh > 0 ? (Math.random() - 0.5) * sh : 0;
+    const shy = sh > 0 ? (Math.random() - 0.5) * sh : 0;
+
+    ctx.save();
+    ctx.translate(shx, shy);
+
     const r = input.arenaRadius;
+    this.drawFloor(r, now);
+    this.drawBorder(r, now, effects);
+    this.drawFalls(effects, now);
+    this.drawParticles(effects, effects.particles, 1);
+    this.drawFighters(input, effects, dt, now);
+    this.drawRings(effects, now);
+    this.drawParticles(effects, effects.embers, 0.9);
+
+    ctx.restore();
+
+    // full-screen flash (parry) — above the shake layer
+    if (effects.flash > 0) {
+      ctx.fillStyle = `rgba(77,216,255,${effects.flash * 0.16})`;
+      ctx.fillRect(0, 0, this.W, this.H);
+    }
+    // dark vignette for depth
+    this.drawVignette();
+
+    this.drawHud(input);
+  }
+
+  // ---- arena floor: warm light, wood planks, centre emblem ----------------
+  private drawFloor(r: number, now: number): void {
+    const ctx = this.ctx;
+    this.octPath(r);
+    ctx.save();
+    ctx.clip();
+
+    // base + warm overhead light pooling near the centre
+    const g = ctx.createRadialGradient(this.cx, this.cy - r * this.scale * 0.15, r * this.scale * 0.1, this.cx, this.cy, r * this.scale * 1.2);
+    g.addColorStop(0, '#2a2532');
+    g.addColorStop(0.6, C.tatame);
+    g.addColorStop(1, '#141119');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, this.W, this.H);
+
+    // wood planks
+    const plankW = 46 * this.scale * (TUNING.arena.startRadius / 340);
+    ctx.lineWidth = 1;
+    for (let px = this.cx - r * this.scale; px < this.cx + r * this.scale; px += plankW) {
+      ctx.strokeStyle = 'rgba(0,0,0,0.16)';
+      ctx.beginPath();
+      ctx.moveTo(px, this.cy - r * this.scale);
+      ctx.lineTo(px, this.cy + r * this.scale);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(245,242,232,0.02)';
+      ctx.beginPath();
+      ctx.moveTo(px + 1, this.cy - r * this.scale);
+      ctx.lineTo(px + 1, this.cy + r * this.scale);
+      ctx.stroke();
+    }
+
+    // guide rings + centre dojo emblem
+    ctx.strokeStyle = 'rgba(245,242,232,0.05)';
+    ctx.lineWidth = 1;
+    this.octPath(r * 0.62);
+    ctx.stroke();
+
+    const er = r * 0.24 * this.scale;
+    ctx.save();
+    ctx.translate(this.cx, this.cy);
+    ctx.globalAlpha = 0.6;
+    ctx.strokeStyle = 'rgba(245,242,232,0.08)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, er, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(0, 0, er * 0.66, 0, Math.PI * 2);
+    ctx.stroke();
+    // subtle rotating diamond mark
+    const rot = now / 6000;
+    ctx.rotate(rot);
+    ctx.strokeStyle = 'rgba(245,242,232,0.06)';
+    ctx.beginPath();
+    for (let i = 0; i < 4; i++) {
+      const a = (Math.PI / 2) * i;
+      ctx.moveTo(0, 0);
+      ctx.lineTo(Math.cos(a) * er * 0.5, Math.sin(a) * er * 0.5);
+    }
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.restore();
+  }
+
+  // ---- shrinking border: chalk memory + advancing danger line + embers ----
+  private drawBorder(r: number, now: number, effects: Effects): void {
+    const ctx = this.ctx;
     const startR = TUNING.arena.startRadius;
 
-    // faded chalk of where the border used to be
     if (r < startR - 1) {
       this.octPath(startR);
       ctx.strokeStyle = 'rgba(245,242,232,0.05)';
@@ -96,36 +207,58 @@ export class Renderer {
       ctx.stroke();
     }
 
-    // living floor + void beyond
-    this.octPath(r);
-    ctx.save();
-    ctx.clip();
-    ctx.fillStyle = C.tatame;
-    ctx.fillRect(0, 0, this.W, this.H);
-    ctx.strokeStyle = 'rgba(245,242,232,0.045)';
-    ctx.lineWidth = 1;
-    this.octPath(r * 0.5);
-    ctx.stroke();
-    ctx.restore();
-
-    // advancing danger line — brighter/redder as the arena closes
     const danger = 1 - clamp((r - TUNING.arena.endRadius) / (startR - TUNING.arena.endRadius), 0, 1);
+
+    // spawn embers rising off the hot border, more as it closes in
+    const emberCount = danger * 1.5;
+    if (Math.random() < emberCount) {
+      const vs = vertices(r);
+      const e = Math.floor(Math.random() * 8);
+      const a = vs[e];
+      const b = vs[(e + 1) % 8];
+      const t = Math.random();
+      effects.spawnEmber({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+    }
+
+    // outer glow
     this.octPath(r);
     ctx.strokeStyle = C.perigo;
-    ctx.lineWidth = 2.5 + danger * 3.5;
+    ctx.lineWidth = 2.5 + danger * 4;
     ctx.shadowColor = C.perigo;
-    ctx.shadowBlur = 8 + danger * 26 + (0.5 + 0.5 * Math.sin(now / 140)) * danger * 10;
+    ctx.shadowBlur = 10 + danger * 28 + (0.5 + 0.5 * Math.sin(now / 130)) * danger * 14;
     ctx.stroke();
     ctx.shadowBlur = 0;
+    // crisp chalk inner edge
     this.octPath(r);
     ctx.strokeStyle = 'rgba(245,242,232,0.5)';
     ctx.lineWidth = 1.5;
     ctx.stroke();
+  }
 
-    // falling eliminated discs
+  private drawParticles(_effects: Effects, arr: import('./effects').Particle[], glow: number): void {
+    const ctx = this.ctx;
+    for (const p of arr) {
+      const k = 1 - p.life / p.maxLife;
+      const s = this.toScreen(p);
+      ctx.globalAlpha = k * glow;
+      if (glow < 1) {
+        ctx.shadowColor = p.color;
+        ctx.shadowBlur = 6;
+      }
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, p.size * this.scale * (0.5 + k * 0.5), 0, Math.PI * 2);
+      ctx.fillStyle = p.color;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  private drawFalls(effects: Effects, now: number): void {
+    const ctx = this.ctx;
     for (let i = effects.falls.length - 1; i >= 0; i--) {
       const f = effects.falls[i];
-      const t = (now - f.t0) / 300;
+      const t = (now - f.t0) / 320;
       if (t >= 1) {
         effects.falls.splice(i, 1);
         continue;
@@ -133,16 +266,118 @@ export class Renderer {
       const s = this.toScreen(f.pos);
       ctx.globalAlpha = 1 - t;
       ctx.beginPath();
-      ctx.arc(s.x, s.y, TUNING.disc.radius * this.scale * (1 - t * 0.7), 0, Math.PI * 2);
-      ctx.fillStyle = f.color;
+      ctx.arc(s.x, s.y + t * 40, TUNING.disc.radius * this.scale * (1 - t * 0.7), 0, Math.PI * 2);
+      ctx.fillStyle = shade(f.color, -0.2 - t * 0.5);
       ctx.fill();
       ctx.globalAlpha = 1;
     }
+  }
 
-    // discs
-    for (const d of input.discs) this.drawDisc(d, input);
+  private drawFighters(input: RenderInput, effects: Effects, dt: number, now: number): void {
+    for (const d of input.discs) {
+      if (!d.alive) continue;
+      const st = this.animFor(d, input, dt);
+      const s = this.toScreen(d.pos);
+      const rad = TUNING.disc.radius * this.scale;
+      const color = this.colorOf(d.playerId, input);
 
-    // rings
+      if (d.ghost) {
+        drawGhostFighter(this.ctx, s.x, s.y, rad, color, now / 500);
+        continue;
+      }
+
+      // reflect states drawn under the fighter for a clear read
+      this.reflectAura(d, s.x, s.y, rad, now);
+
+      const speed = Math.hypot(d.vel.x, d.vel.y);
+      const moving = clamp(speed / TUNING.disc.maxSpeed, 0, 1);
+      if (moving > 0.35) effects.dust(d.pos, { x: d.vel.x / (speed || 1), y: d.vel.y / (speed || 1) }, shade(color, -0.3));
+
+      drawFighter(this.ctx, s.x, s.y, rad, {
+        color,
+        facing: st.facing,
+        moving,
+        walkPhase: st.walkPhase,
+        pushing: st.push,
+        squash: st.push * 0.4,
+      });
+
+      if (d.isSelf) this.selfMarker(s.x, s.y, rad, now);
+      this.cooldownArcs(d, input, s.x, s.y, rad);
+    }
+  }
+
+  private animFor(d: RenderDisc, input: RenderInput, dt: number): AnimState {
+    let st = this.anim.get(d.playerId);
+    if (!st) {
+      st = { facing: Math.atan2(d.pos.y, d.pos.x) + Math.PI, walkPhase: 0, push: 0 };
+      this.anim.set(d.playerId, st);
+    }
+    const speed = Math.hypot(d.vel.x, d.vel.y);
+    if (speed > 12) {
+      const target = Math.atan2(d.vel.y, d.vel.x);
+      st.facing = lerpAngle(st.facing, target, 1 - Math.exp(-14 * dt));
+    }
+    st.walkPhase += dt * (6 + (speed / TUNING.disc.maxSpeed) * 14);
+    const pushing = input.clientTick < d.pushAnimUntil && input.clientTick >= d.pushAnimUntil - PUSH_ANIM_TICKS;
+    const targetPush = pushing ? 1 : 0;
+    st.push += (targetPush - st.push) * (1 - Math.exp(-18 * dt));
+    return st;
+  }
+
+  private reflectAura(d: RenderDisc, x: number, y: number, rad: number, now: number): void {
+    const ctx = this.ctx;
+    if (d.reflectState === 'active') {
+      const pulse = 0.5 + 0.5 * Math.sin(now / 60);
+      ctx.beginPath();
+      ctx.arc(x, y, rad + 9 + pulse * 3, 0, Math.PI * 2);
+      ctx.strokeStyle = C.reflexo;
+      ctx.lineWidth = 4;
+      ctx.shadowColor = C.reflexo;
+      ctx.shadowBlur = 20;
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.beginPath();
+      ctx.arc(x, y, rad + 9 + pulse * 3, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(77,216,255,${0.08 + pulse * 0.06})`;
+      ctx.fill();
+    } else if (d.reflectState === 'recovery') {
+      ctx.beginPath();
+      ctx.arc(x, y, rad + 6, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(255,77,46,0.75)';
+      ctx.lineWidth = 3;
+      ctx.setLineDash([5, 5]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
+
+  private selfMarker(x: number, y: number, rad: number, now: number): void {
+    const ctx = this.ctx;
+    // little bouncing chevron above your own fighter
+    const bob = Math.sin(now / 260) * 3;
+    ctx.fillStyle = C.marca;
+    ctx.beginPath();
+    ctx.moveTo(x, y - rad - 14 + bob);
+    ctx.lineTo(x - 6, y - rad - 22 + bob);
+    ctx.lineTo(x + 6, y - rad - 22 + bob);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  private cooldownArcs(d: RenderDisc, input: RenderInput, x: number, y: number, rad: number): void {
+    if (input.clientTick < d.pushCooldownUntil) {
+      const frac = clamp((d.pushCooldownUntil - input.clientTick) / PUSH_CD_TICKS, 0, 1);
+      this.arc(x, y, rad + 4, -Math.PI / 2, -Math.PI / 2 + (1 - frac) * Math.PI * 2, C.marca, 3);
+    }
+    if (d.isSelf && input.clientTick < d.reflectCooldownUntil) {
+      const frac = clamp((d.reflectCooldownUntil - input.clientTick) / REFLECT_CD_TICKS, 0, 1);
+      this.arc(x, y, rad + 11, -Math.PI / 2, -Math.PI / 2 + (1 - frac) * Math.PI * 2, C.reflexo, 2.5);
+    }
+  }
+
+  private drawRings(effects: Effects, now: number): void {
+    const ctx = this.ctx;
     for (let i = effects.rings.length - 1; i >= 0; i--) {
       const ring = effects.rings[i];
       const t = (now - ring.t0) / ring.dur;
@@ -151,89 +386,24 @@ export class Renderer {
         continue;
       }
       const s = this.toScreen(ring.pos);
+      const ease = 1 - (1 - t) * (1 - t);
       ctx.beginPath();
-      ctx.arc(s.x, s.y, (TUNING.disc.radius + t * ring.maxR) * this.scale, 0, Math.PI * 2);
+      ctx.arc(s.x, s.y, (TUNING.disc.radius + ease * ring.maxR) * this.scale, 0, Math.PI * 2);
       ctx.strokeStyle = ring.color;
       ctx.globalAlpha = (1 - t) * 0.9;
-      ctx.lineWidth = 3 * (1 - t) + 1;
+      ctx.lineWidth = ring.width * (1 - t) + 1;
       ctx.stroke();
       ctx.globalAlpha = 1;
     }
-
-    // parry flash
-    if (effects.flash > 0) {
-      ctx.fillStyle = `rgba(77,216,255,${effects.flash * 0.14})`;
-      ctx.fillRect(0, 0, this.W, this.H);
-    }
-
-    this.drawHud(input);
   }
 
-  private drawDisc(d: RenderDisc, input: RenderInput): void {
-    if (!d.alive) return;
+  private drawVignette(): void {
     const ctx = this.ctx;
-    const s = this.toScreen(d.pos);
-    const rad = TUNING.disc.radius * this.scale;
-    const color = this.colorOf(d.playerId, input);
-
-    if (d.ghost) {
-      ctx.beginPath();
-      ctx.arc(s.x, s.y, rad * 0.8, 0, Math.PI * 2);
-      ctx.fillStyle = color;
-      ctx.globalAlpha = 0.28;
-      ctx.fill();
-      ctx.globalAlpha = 0.5;
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = color;
-      ctx.stroke();
-      ctx.globalAlpha = 1;
-      return;
-    }
-
-    if (d.reflectState === 'active') {
-      ctx.beginPath();
-      ctx.arc(s.x, s.y, rad + 7, 0, Math.PI * 2);
-      ctx.strokeStyle = C.reflexo;
-      ctx.lineWidth = 4;
-      ctx.shadowColor = C.reflexo;
-      ctx.shadowBlur = 16;
-      ctx.stroke();
-      ctx.shadowBlur = 0;
-    } else if (d.reflectState === 'recovery') {
-      ctx.beginPath();
-      ctx.arc(s.x, s.y, rad + 5, 0, Math.PI * 2);
-      ctx.strokeStyle = 'rgba(255,77,46,0.7)';
-      ctx.lineWidth = 3;
-      ctx.setLineDash([4, 4]);
-      ctx.stroke();
-      ctx.setLineDash([]);
-    }
-
-    // body: flat circle, thick dark border, self gets a marca ring
-    ctx.beginPath();
-    ctx.arc(s.x, s.y, rad, 0, Math.PI * 2);
-    ctx.fillStyle = color;
-    ctx.fill();
-    ctx.lineWidth = 4;
-    ctx.strokeStyle = C.void;
-    ctx.stroke();
-    if (d.isSelf) {
-      ctx.beginPath();
-      ctx.arc(s.x, s.y, rad - 6, 0, Math.PI * 2);
-      ctx.strokeStyle = 'rgba(245,242,232,0.9)';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-    }
-
-    // cooldown arcs (peripheral-legible: colour & shape, no numbers)
-    if (input.clientTick < d.pushCooldownUntil) {
-      const frac = clamp((d.pushCooldownUntil - input.clientTick) / PUSH_CD_TICKS, 0, 1);
-      this.arc(s.x, s.y, rad + 3, -Math.PI / 2, -Math.PI / 2 + (1 - frac) * Math.PI * 2, C.marca, 2.5);
-    }
-    if (d.isSelf && input.clientTick < d.reflectCooldownUntil) {
-      const frac = clamp((d.reflectCooldownUntil - input.clientTick) / REFLECT_CD_TICKS, 0, 1);
-      this.arc(s.x, s.y, rad + 9, -Math.PI / 2, -Math.PI / 2 + (1 - frac) * Math.PI * 2, C.reflexo, 2);
-    }
+    const g = ctx.createRadialGradient(this.cx, this.cy, Math.min(this.W, this.H) * 0.35, this.cx, this.cy, Math.max(this.W, this.H) * 0.75);
+    g.addColorStop(0, 'rgba(0,0,0,0)');
+    g.addColorStop(1, 'rgba(0,0,0,0.55)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, this.W, this.H);
   }
 
   private arc(x: number, y: number, r: number, a0: number, a1: number, color: string, w: number): void {
@@ -242,32 +412,43 @@ export class Renderer {
     ctx.arc(x, y, r, a0, a1);
     ctx.strokeStyle = color;
     ctx.lineWidth = w;
+    ctx.lineCap = 'round';
     ctx.stroke();
+    ctx.lineCap = 'butt';
   }
 
   private drawHud(input: RenderInput): void {
     const ctx = this.ctx;
     ctx.textBaseline = 'middle';
 
-    // top scoreboard strip
+    // top scoreboard strip on a subtle panel
     const players = input.players;
     const n = Math.max(players.length, 1);
-    const gap = Math.min(170, (this.W - 40) / n);
+    const gap = Math.min(180, (this.W - 40) / n);
     const total = (n - 1) * gap;
     let x = this.W / 2 - total / 2;
-    ctx.font = "700 14px 'Archivo Black', system-ui, sans-serif";
+    ctx.font = "700 14px 'Archivo Variable', 'Archivo Black', system-ui, sans-serif";
     for (const p of players) {
       const disc = input.discs.find((d) => d.playerId === p.id);
       const alive = disc ? disc.alive && !disc.ghost : false;
       ctx.globalAlpha = alive || input.phase !== 'playing' ? 1 : 0.4;
+      // colour token
       ctx.beginPath();
-      ctx.arc(x - 46, 24, 6, 0, Math.PI * 2);
+      ctx.arc(x - 52, 26, 7, 0, Math.PI * 2);
       ctx.fillStyle = p.color;
+      ctx.shadowColor = p.color;
+      ctx.shadowBlur = alive && input.phase === 'playing' ? 10 : 0;
       ctx.fill();
+      ctx.shadowBlur = 0;
       ctx.fillStyle = p.id === input.selfId ? C.marca : '#c7c2d2';
       ctx.textAlign = 'left';
       const score = input.scores[p.id] ?? p.score ?? 0;
-      ctx.fillText(`${p.nickname} ${score}`, x - 36, 24);
+      ctx.fillText(p.nickname, x - 40, 20);
+      // score pips
+      ctx.font = "800 13px 'JetBrains Mono', monospace";
+      ctx.fillStyle = p.color;
+      ctx.fillText('◆'.repeat(score) + '◇'.repeat(Math.max(0, TUNING.match.scoreToWin - score)), x - 40, 34);
+      ctx.font = "700 14px 'Archivo Variable', 'Archivo Black', system-ui, sans-serif";
       ctx.globalAlpha = 1;
       x += gap;
     }
@@ -275,18 +456,30 @@ export class Renderer {
     ctx.textAlign = 'center';
     if (input.phase === 'countdown') {
       const left = Math.ceil(input.countdownLeft);
-      ctx.font = "900 84px 'Archivo Black', system-ui, sans-serif";
+      ctx.font = "900 96px 'Archivo Black', system-ui, sans-serif";
       ctx.fillStyle = C.marca;
+      ctx.shadowColor = C.perigo;
+      ctx.shadowBlur = 24;
       ctx.fillText(left > 0 ? String(left) : 'VAI!', this.W / 2, this.cy);
+      ctx.shadowBlur = 0;
     } else if (input.phase === 'playing') {
-      ctx.font = "600 13px 'JetBrains Mono', monospace";
-      ctx.fillStyle = input.roundTimeLeft < 10 ? C.perigo : '#6d6880';
-      ctx.fillText(input.roundTimeLeft.toFixed(1) + 's', this.W / 2, 48);
+      ctx.font = "700 15px 'JetBrains Mono', monospace";
+      const urgent = input.roundTimeLeft < 10;
+      ctx.fillStyle = urgent ? C.perigo : '#8d8898';
+      if (urgent) {
+        ctx.shadowColor = C.perigo;
+        ctx.shadowBlur = 12;
+      }
+      ctx.fillText(input.roundTimeLeft.toFixed(1) + 's', this.W / 2, 52);
+      ctx.shadowBlur = 0;
     } else if (input.phase === 'round_end') {
       const w = input.roundWinnerId;
-      ctx.font = "900 40px 'Archivo Black', system-ui, sans-serif";
-      ctx.fillStyle = w ? this.colorOf(w, input) : '#6d6880';
+      ctx.font = "900 44px 'Archivo Black', system-ui, sans-serif";
+      ctx.fillStyle = w ? this.colorOf(w, input) : '#8d8898';
+      ctx.shadowColor = 'rgba(0,0,0,0.6)';
+      ctx.shadowBlur = 12;
       ctx.fillText(w ? `${this.nameOf(w, input)} venceu a rodada` : 'Empate', this.W / 2, this.cy);
+      ctx.shadowBlur = 0;
     }
   }
 
@@ -300,4 +493,9 @@ export class Renderer {
 
 function clamp(v: number, lo: number, hi: number): number {
   return v < lo ? lo : v > hi ? hi : v;
+}
+function lerpAngle(a: number, b: number, t: number): number {
+  let d = ((b - a + Math.PI) % (Math.PI * 2)) - Math.PI;
+  if (d < -Math.PI) d += Math.PI * 2;
+  return a + d * t;
 }

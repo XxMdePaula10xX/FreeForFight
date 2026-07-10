@@ -4,46 +4,73 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Octógono — protótipo local</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
 <style>
   :root {
-    --void: #0d0b0f;
-    --tatame: #1c1a24;
-    --marca: #f5f2e8;
-    --perigo: #ff4d2e;
-    --reflexo: #4dd8ff;
+    --void: #0d0b0f; --tatame: #1c1a24; --marca: #f5f2e8; --perigo: #ff4d2e; --reflexo: #4dd8ff;
+    --ink-2: #b0abbd; --ink-3: #6d6880;
+    --display: 'Archivo Black', system-ui, sans-serif;
+    --mono: ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, monospace;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { height: 100%; background: var(--void); overflow: hidden;
-    font-family: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace; color: var(--marca); }
-  #stage { position: fixed; inset: 0; display: block; }
+  html, body { height: 100%; background: var(--void); overflow: hidden; color: var(--marca); font-family: var(--mono); }
+  #stage { position: fixed; inset: 0; display: block; z-index: 1; }
+  /* animated backdrop */
+  #bg { position: fixed; inset: 0; z-index: 0; overflow: hidden;
+    background: radial-gradient(120% 90% at 50% 8%, #1a1622 0%, #0d0b0f 55%, #060509 100%); }
+  #bg .glow { position: absolute; border-radius: 50%; filter: blur(90px); mix-blend-mode: screen; }
+  #bg .g1 { width: 46vmax; height: 46vmax; left: -8vmax; top: -6vmax; opacity: .5;
+    background: radial-gradient(circle, #ff4d2e, transparent 65%); animation: drift1 22s ease-in-out infinite; }
+  #bg .g2 { width: 40vmax; height: 40vmax; right: -6vmax; bottom: -8vmax; opacity: .3;
+    background: radial-gradient(circle, #4dd8ff, transparent 65%); animation: drift2 28s ease-in-out infinite; }
+  @keyframes drift1 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(8vmax,6vmax)} }
+  @keyframes drift2 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(-7vmax,-5vmax)} }
+  #bg .oct { position: absolute; left: 50%; top: 50%; background-repeat: no-repeat; background-position: center;
+    background-size: contain; opacity: .06; width: 90vmin; height: 90vmin; margin: -45vmin 0 0 -45vmin;
+    animation: spin 90s linear infinite;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpolygon points='29,4 71,4 96,29 96,71 71,96 29,96 4,71 4,29' fill='none' stroke='%23f5f2e8' stroke-width='0.4'/%3E%3C/svg%3E"); }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
   #overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
-    text-align: center; pointer-events: none; }
-  #panel { pointer-events: auto; background: rgba(13,11,15,0.86); border: 2px solid rgba(245,242,232,0.15);
-    border-radius: 14px; padding: 28px 34px; max-width: 560px; }
-  h1 { font-family: 'Archivo Black', system-ui, sans-serif; font-weight: 900; letter-spacing: -0.02em;
-    text-transform: uppercase; font-size: clamp(28px, 6vw, 52px); line-height: 0.95; }
-  h1 .sub { display: block; color: var(--perigo); font-size: 0.42em; letter-spacing: 0.24em; margin-top: 6px; }
-  p { margin: 12px 0; font-size: 13px; line-height: 1.5; color: #b9b4c4; }
-  .row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 18px; }
-  button { pointer-events: auto; cursor: pointer; font-family: inherit; font-weight: 700; font-size: 14px;
-    padding: 12px 22px; border-radius: 10px; border: 2px solid var(--marca); background: transparent;
-    color: var(--marca); text-transform: uppercase; letter-spacing: 0.06em; transition: transform .06s; }
-  button:hover { background: var(--marca); color: var(--void); }
+    text-align: center; z-index: 10; padding: 20px; }
+  #panel { position: relative; background: rgba(22,19,28,0.72); border: 1px solid rgba(245,242,232,0.12);
+    border-radius: 20px; padding: 34px; max-width: 580px; backdrop-filter: blur(16px);
+    box-shadow: 0 30px 80px -20px rgba(0,0,0,0.8), inset 0 1px 0 rgba(245,242,232,0.08);
+    animation: panelIn .5s cubic-bezier(.2,.9,.3,1) both; }
+  #panel::before { content:''; position:absolute; inset:0; border-radius:20px; padding:1px; pointer-events:none;
+    background: linear-gradient(160deg, rgba(255,77,46,0.5), rgba(77,216,255,0.18) 40%, transparent 70%);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+    mask-composite: exclude; }
+  @keyframes panelIn { from{opacity:0;transform:translateY(16px) scale(.98)} to{opacity:1;transform:none} }
+  h1 { font-family: var(--display); font-weight: 900; letter-spacing: -0.03em; text-transform: uppercase;
+    font-size: clamp(32px, 7vw, 58px); line-height: 0.9; text-shadow: 0 0 40px rgba(255,77,46,0.35); }
+  h1 .sub { display: block; color: var(--perigo); font-family: var(--mono); font-size: 0.2em; letter-spacing: 0.4em;
+    margin-top: 12px; text-shadow: none; }
+  p { margin: 14px 0; font-size: 13px; line-height: 1.55; color: var(--ink-2); }
+  .row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 20px; }
+  button { cursor: pointer; font-family: var(--display); font-weight: 400; font-size: 14px; padding: 13px 22px;
+    border-radius: 12px; border: 1.5px solid rgba(245,242,232,0.12); background: rgba(245,242,232,0.04);
+    color: var(--marca); text-transform: uppercase; letter-spacing: 0.06em; transition: transform .07s, background .15s, box-shadow .15s, filter .15s; }
+  button:hover { background: rgba(245,242,232,0.1); }
   button:active { transform: scale(0.96); }
-  button.primary { background: var(--perigo); border-color: var(--perigo); color: #fff; }
-  button.primary:hover { filter: brightness(1.1); }
-  .keys { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px 22px; text-align: left;
-    margin: 16px auto 0; font-size: 12px; max-width: 460px; }
-  .keys .k { display: flex; align-items: center; gap: 8px; }
-  .swatch { width: 12px; height: 12px; border-radius: 50%; border: 2px solid rgba(0,0,0,0.5); flex: none; }
-  kbd { background: #26232f; border: 1px solid #3a3646; border-bottom-width: 2px; border-radius: 4px;
-    padding: 1px 5px; font-size: 11px; color: var(--marca); }
+  button.primary { background: linear-gradient(135deg,#ff6a3d,#ff4d2e 60%,#e23417); border-color: transparent; color: #fff;
+    box-shadow: 0 10px 30px -8px rgba(255,77,46,0.6), inset 0 1px 0 rgba(255,255,255,0.3); }
+  button.primary:hover { filter: brightness(1.08); }
+  .keys { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px 22px; text-align: left;
+    margin: 20px auto 0; font-size: 12px; max-width: 480px; }
+  .keys .k { display: flex; align-items: center; gap: 9px; background: rgba(9,8,12,0.5);
+    border: 1px solid rgba(245,242,232,0.1); border-radius: 10px; padding: 9px 12px; }
+  .swatch { width: 14px; height: 14px; border-radius: 50%; flex: none; box-shadow: 0 0 12px -1px currentColor; }
+  kbd { background: #26232f; border: 1px solid #3a3646; border-radius: 4px; padding: 1px 5px; font-size: 11px; }
   .hidden { display: none !important; }
   #hint { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); font-size: 11px;
-    color: #6d6880; letter-spacing: 0.05em; }
+    color: var(--ink-3); letter-spacing: 0.05em; z-index: 10; }
 </style>
 </head>
 <body>
+<div id="bg"><div class="glow g1"></div><div class="glow g2"></div><div class="oct"></div></div>
 <canvas id="stage"></canvas>
 <div id="overlay">
   <div id="panel">
@@ -65,14 +92,11 @@
 
 <script type="module">
 // =============================================================================
-//  Octógono — protótipo local (arquivo único, 4 discos, 1 teclado, sem rede).
-//  A física aqui é uma tradução fiel de shared/physics.ts. Ajuste TUNING e
-//  jogue. Se não for divertido aqui, não será divertido online (PRD §12).
+//  Octógono — protótipo local. Física fiel a shared/physics.ts; visual fiel ao
+//  cliente (lutadores, fundo de dojô, partículas). Ajuste TUNING e jogue.
 // =============================================================================
-
 const TICK_RATE = 60, DT = 1 / TICK_RATE;
 const msToTicks = (ms) => Math.round((ms / 1000) * TICK_RATE);
-
 const TUNING = {
   disc: { radius: 24, mass: 1, maxSpeed: 260, accel: 1400, friction: 0.90 },
   collision: { restitution: 0.85 },
@@ -84,59 +108,41 @@ const TUNING = {
   match: { scoreToWin: 3 },
 };
 const D = TUNING.disc, P = TUNING.push, R = TUNING.reflect, G = TUNING.ghost;
-const PUSH_CD = msToTicks(P.cooldown), R_ACTIVE = msToTicks(R.active),
-  R_RECOVERY = msToTicks(R.recovery), R_CD = msToTicks(R.cooldown),
-  GHOST_CD = msToTicks(G.cooldown), SHRINK_START = msToTicks(TUNING.arena.shrinkStartAt),
+const PUSH_CD = msToTicks(P.cooldown), R_ACTIVE = msToTicks(R.active), R_RECOVERY = msToTicks(R.recovery),
+  R_CD = msToTicks(R.cooldown), GHOST_CD = msToTicks(G.cooldown), SHRINK_START = msToTicks(TUNING.arena.shrinkStartAt),
   SHRINK_DUR = msToTicks(TUNING.arena.shrinkDuration), MAX_ROUND = msToTicks(TUNING.round.maxDuration),
   PUSH_ANIM = msToTicks(P.duration);
-
 const COLORS = ['#ffd23f', '#3ddc84', '#ff6bd6', '#7c5cff'];
 const NAMES = ['Amarelo', 'Verde', 'Rosa', 'Roxo'];
-
-// event.code control map. Distinct clusters so 4 people share one keyboard.
 const KEYMAP = [
-  { up: 'KeyW', down: 'KeyS', left: 'KeyA', right: 'KeyD', push: 'Space', reflect: 'ShiftLeft',
-    label: 'WASD + Espaço + Shift↲' },
-  { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight', push: 'Slash', reflect: 'ShiftRight',
-    label: 'Setas + / + Shift↳' },
-  { up: 'KeyI', down: 'KeyK', left: 'KeyJ', right: 'KeyL', push: 'KeyU', reflect: 'KeyO',
-    label: 'IJKL + U + O' },
-  { up: 'KeyT', down: 'KeyG', left: 'KeyF', right: 'KeyH', push: 'KeyR', reflect: 'KeyY',
-    label: 'TFGH + R + Y' },
+  { up:'KeyW',down:'KeyS',left:'KeyA',right:'KeyD',push:'Space',reflect:'ShiftLeft', label:'WASD + Espaço + Shift↲' },
+  { up:'ArrowUp',down:'ArrowDown',left:'ArrowLeft',right:'ArrowRight',push:'Slash',reflect:'ShiftRight', label:'Setas + / + Shift↳' },
+  { up:'KeyI',down:'KeyK',left:'KeyJ',right:'KeyL',push:'KeyU',reflect:'KeyO', label:'IJKL + U + O' },
+  { up:'KeyT',down:'KeyG',left:'KeyF',right:'KeyH',push:'KeyR',reflect:'KeyY', label:'TFGH + R + Y' },
 ];
 
-// ---- geometry (regular octagon, flat sides at top/bottom/left/right) --------
-const EDGE_NORMALS = Array.from({ length: 8 }, (_, k) => {
-  const a = (Math.PI / 4) * k; return { x: Math.cos(a), y: Math.sin(a) };
-});
+// ---- geometry ---------------------------------------------------------------
+const EDGE_NORMALS = Array.from({ length: 8 }, (_, k) => { const a = (Math.PI/4)*k; return { x: Math.cos(a), y: Math.sin(a) }; });
 const APOTHEM_RATIO = Math.cos(Math.PI / 8);
 const apothem = (r) => r * APOTHEM_RATIO;
-function outsideDepth(p, r) {
-  const a = apothem(r); let m = -Infinity;
-  for (const n of EDGE_NORMALS) { const d = p.x * n.x + p.y * n.y - a; if (d > m) m = d; }
-  return m;
-}
-function vertices(r) {
-  return Array.from({ length: 8 }, (_, k) => {
-    const a = Math.PI / 8 + (Math.PI / 4) * k;
-    return { x: Math.cos(a) * r, y: Math.sin(a) * r };
-  });
-}
-function boundaryDistanceAlong(u, r) {
-  const a = apothem(r); let md = 0;
-  for (const n of EDGE_NORMALS) { const d = u.x * n.x + u.y * n.y; if (d > md) md = d; }
-  return md < 1e-9 ? r : a / md;
-}
+function outsideDepth(p, r) { const a = apothem(r); let m = -Infinity; for (const n of EDGE_NORMALS) { const d = p.x*n.x+p.y*n.y-a; if (d>m) m=d; } return m; }
+function vertices(r) { return Array.from({ length: 8 }, (_, k) => { const a = Math.PI/8 + (Math.PI/4)*k; return { x: Math.cos(a)*r, y: Math.sin(a)*r }; }); }
+function boundaryDistanceAlong(u, r) { const a = apothem(r); let md = 0; for (const n of EDGE_NORMALS) { const d = u.x*n.x+u.y*n.y; if (d>md) md=d; } return md<1e-9?r:a/md; }
 const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 const lerp = (a, b, t) => a + (b - a) * t;
-function normalize(a) { const l = Math.hypot(a.x, a.y); return l < 1e-9 ? { x: 0, y: 0 } : { x: a.x / l, y: a.y / l }; }
+function normalize(a) { const l = Math.hypot(a.x, a.y); return l < 1e-9 ? { x:0,y:0 } : { x:a.x/l, y:a.y/l }; }
+function lerpAngle(a, b, t) { let d = ((b - a + Math.PI) % (Math.PI*2)) - Math.PI; if (d < -Math.PI) d += Math.PI*2; return a + d*t; }
+function shade(hex, amt) {
+  const n = parseInt(hex.slice(1), 16); let r=(n>>16)&255, g=(n>>8)&255, b=n&255;
+  if (amt>=0){r+=(255-r)*amt;g+=(255-g)*amt;b+=(255-b)*amt;} else {r*=1+amt;g*=1+amt;b*=1+amt;}
+  return `rgb(${r|0},${g|0},${b|0})`;
+}
 
-// ---- simulation state -------------------------------------------------------
-let state = null;   // { tick, roundStartTick, arenaRadius, discs[] }
-let inputs = [];    // per-disc { dir, push, reflect }
+// ---- state ------------------------------------------------------------------
+let state = null, inputs = [];
 let match = { scores: [], playerCount: 0, roundIndex: 0 };
-let fx = { rings: [], falls: [], hitstopUntilMs: 0, flash: 0 };
-let phase = 'menu';  // menu | countdown | playing | round_end | match_end
+let fx = { rings: [], falls: [], particles: [], embers: [], anim: {}, hitstopUntilMs: 0, flash: 0, shake: 0 };
+let phase = 'menu';
 let countdownEndsMs = 0, roundEndAtMs = 0, lastWinner = -1;
 
 function makeDisc(id, pos) {
@@ -144,180 +150,129 @@ function makeDisc(id, pos) {
     ghostAngle: Math.atan2(pos.y, pos.x), pushCooldownUntil: 0, pushAnimUntil: 0,
     reflectState: 'idle', reflectUntil: 0, reflectCooldownUntil: 0 };
 }
-
 function arenaRadiusAt(tick, start) {
-  const e = tick - start;
-  if (e <= SHRINK_START) return TUNING.arena.startRadius;
+  const e = tick - start; if (e <= SHRINK_START) return TUNING.arena.startRadius;
   const t = (e - SHRINK_START) / SHRINK_DUR;
   return t >= 1 ? TUNING.arena.endRadius : lerp(TUNING.arena.startRadius, TUNING.arena.endRadius, t);
 }
-
 function startRound() {
-  const n = match.playerCount;
-  const spawnR = TUNING.arena.startRadius * 0.55;
-  const discs = [];
-  for (let i = 0; i < n; i++) {
-    const a = (Math.PI * 2 * i) / n - Math.PI / 2;
-    discs.push(makeDisc(i, { x: Math.cos(a) * spawnR, y: Math.sin(a) * spawnR }));
-  }
+  const n = match.playerCount, spawnR = TUNING.arena.startRadius * 0.55, discs = [];
+  for (let i = 0; i < n; i++) { const a = (Math.PI*2*i)/n - Math.PI/2; discs.push(makeDisc(i, { x: Math.cos(a)*spawnR, y: Math.sin(a)*spawnR })); }
   state = { tick: 0, roundStartTick: 0, arenaRadius: TUNING.arena.startRadius, discs };
-  inputs = Array.from({ length: n }, () => ({ dir: { x: 0, y: 0 }, push: false, reflect: false }));
-  fx = { rings: [], falls: [], hitstopUntilMs: 0, flash: 0 };
-  phase = 'countdown';
-  countdownEndsMs = performance.now() + TUNING.round.countdown;
-  showOverlay(false);
+  inputs = Array.from({ length: n }, () => ({ dir: { x:0,y:0 }, push: false, reflect: false }));
+  fx = { rings: [], falls: [], particles: [], embers: [], anim: {}, hitstopUntilMs: 0, flash: 0, shake: 0 };
+  phase = 'countdown'; countdownEndsMs = performance.now() + TUNING.round.countdown; showOverlay(false);
 }
 
 // ---- the deterministic tick (mirror of shared/physics.ts) -------------------
 function step() {
-  const events = [];
-  const tick = state.tick;
+  const events = []; const tick = state.tick;
   state.arenaRadius = arenaRadiusAt(tick, state.roundStartTick);
-
-  // A. reflect/push timers
   for (const disc of state.discs) {
-    if (!disc.alive || disc.ghost) continue;
-    const inp = inputs[disc.id];
-    if (disc.reflectState === 'active' && tick >= disc.reflectUntil) {
-      disc.reflectState = 'recovery'; disc.reflectUntil = tick + R_RECOVERY;
-    } else if (disc.reflectState === 'recovery' && tick >= disc.reflectUntil) {
-      disc.reflectState = 'idle'; disc.reflectCooldownUntil = tick + R_CD;
-    }
-    if (inp.reflect && disc.reflectState === 'idle' && tick >= disc.reflectCooldownUntil) {
-      disc.reflectState = 'active'; disc.reflectUntil = tick + R_ACTIVE;
-    }
+    if (!disc.alive || disc.ghost) continue; const inp = inputs[disc.id];
+    if (disc.reflectState === 'active' && tick >= disc.reflectUntil) { disc.reflectState = 'recovery'; disc.reflectUntil = tick + R_RECOVERY; }
+    else if (disc.reflectState === 'recovery' && tick >= disc.reflectUntil) { disc.reflectState = 'idle'; disc.reflectCooldownUntil = tick + R_CD; }
+    if (inp.reflect && disc.reflectState === 'idle' && tick >= disc.reflectCooldownUntil) { disc.reflectState = 'active'; disc.reflectUntil = tick + R_ACTIVE; events.push({ kind:'reflect', pos: { ...disc.pos } }); }
   }
-
-  // B. self-propulsion
   for (const disc of state.discs) {
-    if (!disc.alive || disc.ghost) continue;
-    const inp = inputs[disc.id];
-    if (disc.reflectState === 'active' || disc.reflectState === 'recovery') {
-      disc.vel.x = 0; disc.vel.y = 0; continue;
-    }
+    if (!disc.alive || disc.ghost) continue; const inp = inputs[disc.id];
+    if (disc.reflectState === 'active' || disc.reflectState === 'recovery') { disc.vel.x = 0; disc.vel.y = 0; continue; }
     const dir = normalize(inp.dir);
     disc.vel.x += dir.x * D.accel * DT; disc.vel.y += dir.y * D.accel * DT;
-    const sp = Math.hypot(disc.vel.x, disc.vel.y);
-    if (sp > D.maxSpeed) { const s = D.maxSpeed / sp; disc.vel.x *= s; disc.vel.y *= s; }
+    const sp = Math.hypot(disc.vel.x, disc.vel.y); if (sp > D.maxSpeed) { const s = D.maxSpeed/sp; disc.vel.x*=s; disc.vel.y*=s; }
     disc.vel.x *= D.friction; disc.vel.y *= D.friction;
   }
-
-  // C. pushes
   for (const disc of state.discs) {
-    if (!disc.alive) continue;
-    const inp = inputs[disc.id];
+    if (!disc.alive) continue; const inp = inputs[disc.id];
     if (disc.ghost) {
       if (inp.push && tick >= disc.pushCooldownUntil) {
         disc.pushCooldownUntil = tick + GHOST_CD; disc.pushAnimUntil = tick + PUSH_ANIM;
-        for (const tgt of state.discs) {
-          if (tgt === disc || !tgt.alive || tgt.ghost) continue;
-          applyPushTo(disc, tgt, G.force, G.range);
-        }
-        events.push({ kind: 'ghostPush', pos: { ...disc.pos } });
+        for (const tgt of state.discs) { if (tgt === disc || !tgt.alive || tgt.ghost) continue; applyPushTo(disc, tgt, G.force, G.range); }
+        events.push({ kind:'ghostPush', pos: { ...disc.pos } });
       }
       continue;
     }
     if (!inp.push || tick < disc.pushCooldownUntil || disc.reflectState !== 'idle') continue;
     disc.pushCooldownUntil = tick + PUSH_CD; disc.pushAnimUntil = tick + PUSH_ANIM;
-    events.push({ kind: 'push', pos: { ...disc.pos }, id: disc.id });
+    events.push({ kind:'push', pos: { ...disc.pos }, id: disc.id });
     let rx = 0, ry = 0;
-    for (const tgt of state.discs) {
-      if (tgt === disc || !tgt.alive || tgt.ghost) continue;
-      const r = resolvePush(disc, tgt, P.force, P.range, events);
-      rx -= r.x; ry -= r.y;
-    }
+    for (const tgt of state.discs) { if (tgt === disc || !tgt.alive || tgt.ghost) continue; const r = resolvePush(disc, tgt, P.force, P.range, events); rx -= r.x; ry -= r.y; }
     disc.vel.x += rx * P.selfKnockback; disc.vel.y += ry * P.selfKnockback;
   }
-
-  // D. integrate
   for (const disc of state.discs) {
     if (!disc.alive) continue;
     if (disc.ghost) { moveGhost(disc, inputs[disc.id]); continue; }
     disc.pos.x += disc.vel.x * DT; disc.pos.y += disc.vel.y * DT;
   }
-
-  // E. collisions
   const live = state.discs.filter((d) => d.alive && !d.ghost);
-  for (let i = 0; i < live.length; i++)
-    for (let j = i + 1; j < live.length; j++) collide(live[i], live[j], events);
-
-  // F. eliminations
+  for (let i = 0; i < live.length; i++) for (let j = i+1; j < live.length; j++) collide(live[i], live[j], events);
   for (const disc of state.discs) {
     if (!disc.alive || disc.ghost) continue;
     if (outsideDepth(disc.pos, state.arenaRadius) >= 0) {
       fx.falls.push({ pos: { ...disc.pos }, vel: { ...disc.vel }, color: COLORS[disc.id], t0: performance.now() });
       disc.ghost = true; disc.vel.x = 0; disc.vel.y = 0; disc.reflectState = 'idle';
       disc.ghostAngle = Math.atan2(disc.pos.y, disc.pos.x); disc.pushCooldownUntil = tick + GHOST_CD;
-      events.push({ kind: 'eliminated', pos: { ...disc.pos }, id: disc.id });
+      events.push({ kind:'eliminated', pos: { ...disc.pos }, id: disc.id });
     }
   }
-
-  state.tick++;
-  return events;
+  state.tick++; return events;
 }
-
 function resolvePush(att, tgt, baseForce, range, events) {
-  const dx = tgt.pos.x - att.pos.x, dy = tgt.pos.y - att.pos.y;
-  const d = Math.hypot(dx, dy), reach = range + D.radius;
-  if (d > reach || d < 1e-6) return { x: 0, y: 0 };
-  const nx = dx / d, ny = dy / d;
-  const falloff = lerp(1, P.falloffMin, clamp(d / reach, 0, 1));
-  if (tgt.reflectState === 'active') {
-    const mag = baseForce * falloff * R.returnMult;
-    att.vel.x -= nx * mag; att.vel.y -= ny * mag;
-    events.push({ kind: 'clash', pos: { ...tgt.pos } });
-    return { x: 0, y: 0 };
-  }
-  const mult = tgt.reflectState === 'recovery' ? R.punishMult : 1;
-  const mag = baseForce * falloff * mult;
-  tgt.vel.x += nx * mag; tgt.vel.y += ny * mag;
-  return { x: nx * falloff, y: ny * falloff };
+  const dx = tgt.pos.x-att.pos.x, dy = tgt.pos.y-att.pos.y, d = Math.hypot(dx,dy), reach = range + D.radius;
+  if (d > reach || d < 1e-6) return { x:0,y:0 };
+  const nx = dx/d, ny = dy/d, falloff = lerp(1, P.falloffMin, clamp(d/reach,0,1));
+  if (tgt.reflectState === 'active') { const mag = baseForce*falloff*R.returnMult; att.vel.x -= nx*mag; att.vel.y -= ny*mag; events.push({ kind:'clash', pos: { ...tgt.pos } }); return { x:0,y:0 }; }
+  const mult = tgt.reflectState === 'recovery' ? R.punishMult : 1, mag = baseForce*falloff*mult;
+  tgt.vel.x += nx*mag; tgt.vel.y += ny*mag; return { x: nx*falloff, y: ny*falloff };
 }
 function applyPushTo(att, tgt, baseForce, range) {
-  const dx = tgt.pos.x - att.pos.x, dy = tgt.pos.y - att.pos.y;
-  const d = Math.hypot(dx, dy), reach = range + D.radius;
+  const dx = tgt.pos.x-att.pos.x, dy = tgt.pos.y-att.pos.y, d = Math.hypot(dx,dy), reach = range + D.radius;
   if (d > reach || d < 1e-6) return;
-  const nx = dx / d, ny = dy / d;
-  const falloff = lerp(1, P.falloffMin, clamp(d / reach, 0, 1));
-  const mult = tgt.reflectState === 'recovery' ? R.punishMult : 1;
-  const mag = baseForce * falloff * mult;
-  tgt.vel.x += nx * mag; tgt.vel.y += ny * mag;
+  const nx = dx/d, ny = dy/d, falloff = lerp(1, P.falloffMin, clamp(d/reach,0,1));
+  const mult = tgt.reflectState === 'recovery' ? R.punishMult : 1, mag = baseForce*falloff*mult;
+  tgt.vel.x += nx*mag; tgt.vel.y += ny*mag;
 }
 function collide(a, b, events) {
-  const dx = b.pos.x - a.pos.x, dy = b.pos.y - a.pos.y;
-  const d = Math.hypot(dx, dy), minD = D.radius * 2;
+  const dx = b.pos.x-a.pos.x, dy = b.pos.y-a.pos.y, d = Math.hypot(dx,dy), minD = D.radius*2;
   if (d >= minD || d < 1e-6) return;
-  const nx = dx / d, ny = dy / d, overlap = (minD - d) / 2;
-  a.pos.x -= nx * overlap; a.pos.y -= ny * overlap;
-  b.pos.x += nx * overlap; b.pos.y += ny * overlap;
-  const relVel = (b.vel.x - a.vel.x) * nx + (b.vel.y - a.vel.y) * ny;
-  if (relVel > 0) return;
-  const j = -(1 + TUNING.collision.restitution) * relVel / 2;
-  a.vel.x -= nx * j; a.vel.y -= ny * j; b.vel.x += nx * j; b.vel.y += ny * j;
-  if (j > 220) events.push({ kind: 'clash', pos: { x: a.pos.x + nx * D.radius, y: a.pos.y + ny * D.radius } });
+  const nx = dx/d, ny = dy/d, overlap = (minD-d)/2;
+  a.pos.x -= nx*overlap; a.pos.y -= ny*overlap; b.pos.x += nx*overlap; b.pos.y += ny*overlap;
+  const relVel = (b.vel.x-a.vel.x)*nx + (b.vel.y-a.vel.y)*ny; if (relVel > 0) return;
+  const j = -(1+TUNING.collision.restitution)*relVel/2;
+  a.vel.x -= nx*j; a.vel.y -= ny*j; b.vel.x += nx*j; b.vel.y += ny*j;
+  if (j > 220) events.push({ kind:'clash', pos: { x: a.pos.x + nx*D.radius, y: a.pos.y + ny*D.radius } });
 }
 function moveGhost(disc, inp) {
   const t = { x: -Math.sin(disc.ghostAngle), y: Math.cos(disc.ghostAngle) };
-  const drive = inp.dir.x * t.x + inp.dir.y * t.y;
-  disc.ghostAngle += drive * G.slideSpeed * DT;
-  const u = { x: Math.cos(disc.ghostAngle), y: Math.sin(disc.ghostAngle) };
-  const r = boundaryDistanceAlong(u, state.arenaRadius);
-  disc.pos.x = u.x * r; disc.pos.y = u.y * r; disc.vel.x = 0; disc.vel.y = 0;
+  const drive = inp.dir.x*t.x + inp.dir.y*t.y; disc.ghostAngle += drive * G.slideSpeed * DT;
+  const u = { x: Math.cos(disc.ghostAngle), y: Math.sin(disc.ghostAngle) }, r = boundaryDistanceAlong(u, state.arenaRadius);
+  disc.pos.x = u.x*r; disc.pos.y = u.y*r; disc.vel.x = 0; disc.vel.y = 0;
 }
 
+// ---- events -> effects ------------------------------------------------------
+function burst(pos, color, n, speed) {
+  for (let i = 0; i < n; i++) { const a = Math.random()*Math.PI*2, sp = speed*(0.4+Math.random()*0.6);
+    fx.particles.push({ x: pos.x, y: pos.y, vx: Math.cos(a)*sp, vy: Math.sin(a)*sp, life: 0, maxLife: 0.3+Math.random()*0.4, size: 1.5+Math.random()*2.5, color, drag: 3.5 }); }
+}
 function onEvents(events) {
+  const now = performance.now();
   for (const e of events) {
-    if (e.kind === 'push' || e.kind === 'ghostPush')
-      fx.rings.push({ pos: { ...e.pos }, t0: performance.now(), color: '#f5f2e8', dur: 220 });
-    else if (e.kind === 'clash') {
-      fx.rings.push({ pos: { ...e.pos }, t0: performance.now(), color: '#4dd8ff', dur: 260 });
-      fx.hitstopUntilMs = performance.now() + 60;  // the parry hitstop — makes it *feel* good
-      fx.flash = 1;
-    }
+    if (e.kind === 'push') { fx.rings.push({ pos: { ...e.pos }, t0: now, dur: 240, color: '#f5f2e8', maxR: P.range, w: 4 }); burst(e.pos, '#f5f2e8', 8, 120); }
+    else if (e.kind === 'ghostPush') { fx.rings.push({ pos: { ...e.pos }, t0: now, dur: 220, color: '#c7c2d2', maxR: G.range, w: 3 }); }
+    else if (e.kind === 'clash') { fx.rings.push({ pos: { ...e.pos }, t0: now, dur: 300, color: '#4dd8ff', maxR: 90, w: 6 }); burst(e.pos, '#4dd8ff', 18, 260); burst(e.pos, '#ffffff', 8, 200); fx.hitstopUntilMs = now + 70; fx.flash = 1; fx.shake = Math.max(fx.shake, 9); }
+    else if (e.kind === 'reflect') { fx.rings.push({ pos: { ...e.pos }, t0: now, dur: 220, color: '#4dd8ff', maxR: 48, w: 3 }); }
+    else if (e.kind === 'eliminated') { burst(e.pos, COLORS[e.id], 22, 300); fx.shake = Math.max(fx.shake, 7); }
+  }
+}
+function updateParticles(dt) {
+  fx.flash = Math.max(0, fx.flash - dt*5); fx.shake = Math.max(0, fx.shake - dt*45);
+  for (const arr of [fx.particles, fx.embers]) for (let i = arr.length-1; i >= 0; i--) {
+    const p = arr[i]; p.life += dt; if (p.life >= p.maxLife) { arr.splice(i,1); continue; }
+    const dd = Math.exp(-p.drag*dt); p.vx *= dd; p.vy *= dd; p.x += p.vx*dt; p.y += p.vy*dt;
   }
 }
 
-// ---- round / match flow -----------------------------------------------------
+// ---- round / match ----------------------------------------------------------
 function checkRoundEnd() {
   const aliveDiscs = state.discs.filter((d) => d.alive && !d.ghost);
   const timedOut = state.tick - state.roundStartTick >= MAX_ROUND;
@@ -325,278 +280,211 @@ function checkRoundEnd() {
     const winner = aliveDiscs.length === 1 ? aliveDiscs[0].id : -1;
     if (winner >= 0) match.scores[winner]++;
     lastWinner = winner;
-    if (winner >= 0 && match.scores[winner] >= TUNING.match.scoreToWin) {
-      phase = 'match_end';
-    } else {
-      phase = 'round_end';
-      roundEndAtMs = performance.now() + TUNING.round.endFreeze;
-    }
+    if (winner >= 0 && match.scores[winner] >= TUNING.match.scoreToWin) phase = 'match_end';
+    else { phase = 'round_end'; roundEndAtMs = performance.now() + TUNING.round.endFreeze; }
   }
 }
 
-// ---- main loop (fixed 60Hz accumulator) ------------------------------------
+// ---- main loop --------------------------------------------------------------
 let acc = 0, lastMs = performance.now();
 function frame(now) {
   requestAnimationFrame(frame);
-  let dtMs = now - lastMs; lastMs = now;
-  if (dtMs > 250) dtMs = 250;
-
+  let dtMs = now - lastMs; lastMs = now; if (dtMs > 250) dtMs = 250;
   const frozen = now < fx.hitstopUntilMs;
   if (phase === 'playing' && !frozen) {
     acc += dtMs;
-    while (acc >= 1000 / TICK_RATE) {
-      onEvents(step());
-      acc -= 1000 / TICK_RATE;
-      checkRoundEnd();
-      if (phase !== 'playing') break;
-    }
-  } else {
-    acc = 0;
-  }
-
-  if (phase === 'countdown' && now >= countdownEndsMs) {
-    phase = 'playing'; state.roundStartTick = state.tick; lastMs = now; acc = 0;
-  }
-  if (phase === 'round_end' && now >= roundEndAtMs) {
-    match.roundIndex++;
-    startRound();
-  }
+    while (acc >= 1000/TICK_RATE) { onEvents(step()); acc -= 1000/TICK_RATE; checkRoundEnd(); if (phase !== 'playing') break; }
+  } else acc = 0;
+  if (phase === 'countdown' && now >= countdownEndsMs) { phase = 'playing'; state.roundStartTick = state.tick; lastMs = now; acc = 0; }
+  if (phase === 'round_end' && now >= roundEndAtMs) { match.roundIndex++; startRound(); }
   if (phase === 'match_end') showMatchEnd();
-
+  updateParticles(dtMs / 1000);
   render(now);
 }
 
 // ---- input ------------------------------------------------------------------
 const held = new Set();
-addEventListener('keydown', (e) => {
-  if (['Space', 'Slash', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
-  held.add(e.code);
-});
+addEventListener('keydown', (e) => { if (['Space','Slash','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault(); held.add(e.code); });
 addEventListener('keyup', (e) => held.delete(e.code));
 function pollInputs() {
   if (!inputs.length) return;
   for (let i = 0; i < inputs.length; i++) {
-    const k = KEYMAP[i]; const inp = inputs[i];
-    let x = 0, y = 0;
-    if (held.has(k.left)) x -= 1; if (held.has(k.right)) x += 1;
-    if (held.has(k.up)) y -= 1; if (held.has(k.down)) y += 1;
-    inp.dir.x = x; inp.dir.y = y;
-    inp.push = held.has(k.push); inp.reflect = held.has(k.reflect);
+    const k = KEYMAP[i], inp = inputs[i]; let x = 0, y = 0;
+    if (held.has(k.left)) x -= 1; if (held.has(k.right)) x += 1; if (held.has(k.up)) y -= 1; if (held.has(k.down)) y += 1;
+    inp.dir.x = x; inp.dir.y = y; inp.push = held.has(k.push); inp.reflect = held.has(k.reflect);
   }
 }
 setInterval(pollInputs, 1000 / 60);
 
 // ---- rendering --------------------------------------------------------------
-const canvas = document.getElementById('stage');
-const ctx = canvas.getContext('2d');
-let W = 0, H = 0, DPR = 1, scale = 1, cx = 0, cy = 0;
+const canvas = document.getElementById('stage'); const ctx = canvas.getContext('2d');
+let W = 0, H = 0, DPR = 1, scale = 1, cx = 0, cy = 0, lastRenderMs = performance.now();
 function resize() {
-  DPR = Math.min(window.devicePixelRatio || 1, 2);
-  W = window.innerWidth; H = window.innerHeight;
-  canvas.width = W * DPR; canvas.height = H * DPR;
-  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  DPR = Math.min(window.devicePixelRatio || 1, 2); W = window.innerWidth; H = window.innerHeight;
+  canvas.width = W*DPR; canvas.height = H*DPR; canvas.style.width = W+'px'; canvas.style.height = H+'px';
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-  const margin = 90;
-  scale = Math.min(W, H - margin) / (TUNING.arena.startRadius * 2.15);
-  cx = W / 2; cy = (H + margin * 0.4) / 2;
+  const margin = 80; scale = Math.min(W, H - margin) / (TUNING.arena.startRadius * 2.15); cx = W/2; cy = (H + margin*0.3)/2;
 }
 addEventListener('resize', resize); resize();
-
-function toScreen(p) { return { x: cx + p.x * scale, y: cy + p.y * scale }; }
-function octPath(r) {
-  const vs = vertices(r); ctx.beginPath();
-  for (let i = 0; i < vs.length; i++) {
-    const s = toScreen(vs[i]);
-    if (i === 0) ctx.moveTo(s.x, s.y); else ctx.lineTo(s.x, s.y);
-  }
-  ctx.closePath();
-}
+function toScreen(p) { return { x: cx + p.x*scale, y: cy + p.y*scale }; }
+function octPath(r) { const vs = vertices(r); ctx.beginPath(); for (let i = 0; i < vs.length; i++) { const s = toScreen(vs[i]); if (i===0) ctx.moveTo(s.x,s.y); else ctx.lineTo(s.x,s.y); } ctx.closePath(); }
 
 function render(now) {
+  const dt = Math.min(0.05, (now - lastRenderMs)/1000); lastRenderMs = now;
   ctx.fillStyle = '#0d0b0f'; ctx.fillRect(0, 0, W, H);
   if (!state) return;
   const r = state.arenaRadius;
+  const shx = fx.shake > 0 ? (Math.random()-0.5)*fx.shake : 0, shy = fx.shake > 0 ? (Math.random()-0.5)*fx.shake : 0;
+  ctx.save(); ctx.translate(shx, shy);
 
-  // Signature: the chalk outline that WAS there, fading as the floor is eaten.
+  // floor
+  octPath(r); ctx.save(); ctx.clip();
+  const g = ctx.createRadialGradient(cx, cy - r*scale*0.15, r*scale*0.1, cx, cy, r*scale*1.2);
+  g.addColorStop(0, '#2a2532'); g.addColorStop(0.6, '#1c1a24'); g.addColorStop(1, '#141119');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  const plankW = 46*scale; ctx.lineWidth = 1;
+  for (let px = cx - r*scale; px < cx + r*scale; px += plankW) { ctx.strokeStyle = 'rgba(0,0,0,0.16)'; ctx.beginPath(); ctx.moveTo(px, cy - r*scale); ctx.lineTo(px, cy + r*scale); ctx.stroke(); }
+  ctx.strokeStyle = 'rgba(245,242,232,0.05)'; ctx.lineWidth = 1; octPath(r*0.62); ctx.stroke();
+  const er = r*0.24*scale; ctx.save(); ctx.translate(cx, cy); ctx.globalAlpha = 0.6; ctx.strokeStyle = 'rgba(245,242,232,0.08)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(0,0,er,0,Math.PI*2); ctx.stroke(); ctx.beginPath(); ctx.arc(0,0,er*0.66,0,Math.PI*2); ctx.stroke();
+  ctx.rotate(now/6000); ctx.strokeStyle = 'rgba(245,242,232,0.06)'; ctx.beginPath();
+  for (let i = 0; i < 4; i++) { const a = (Math.PI/2)*i; ctx.moveTo(0,0); ctx.lineTo(Math.cos(a)*er*0.5, Math.sin(a)*er*0.5); } ctx.stroke();
+  ctx.restore(); ctx.restore();
+
+  // border + embers
   const startR = TUNING.arena.startRadius;
-  if (r < startR - 1) {
-    octPath(startR);
-    ctx.strokeStyle = 'rgba(245,242,232,0.06)'; ctx.lineWidth = 1.5; ctx.stroke();
-  }
+  if (r < startR - 1) { octPath(startR); ctx.strokeStyle = 'rgba(245,242,232,0.05)'; ctx.lineWidth = 1.5; ctx.stroke(); }
+  const danger = 1 - clamp((r - TUNING.arena.endRadius) / (startR - TUNING.arena.endRadius), 0, 1);
+  if (Math.random() < danger*1.5) { const vs = vertices(r), e = Math.floor(Math.random()*8), a = vs[e], b = vs[(e+1)%8], t = Math.random();
+    fx.embers.push({ x: a.x+(b.x-a.x)*t, y: a.y+(b.y-a.y)*t, vx: (Math.random()-0.5)*20, vy: -20-Math.random()*30, life: 0, maxLife: 1+Math.random()*1.2, size: 1+Math.random()*2, color: '#ff6a3d', drag: 0.6 }); }
+  octPath(r); ctx.strokeStyle = '#ff4d2e'; ctx.lineWidth = 2.5 + danger*4;
+  ctx.shadowColor = '#ff4d2e'; ctx.shadowBlur = 10 + danger*28 + (0.5+0.5*Math.sin(now/130))*danger*14; ctx.stroke(); ctx.shadowBlur = 0;
+  octPath(r); ctx.strokeStyle = 'rgba(245,242,232,0.5)'; ctx.lineWidth = 1.5; ctx.stroke();
 
-  // The living floor (tatame), with the void beyond it.
-  octPath(r);
-  ctx.save(); ctx.clip();
-  ctx.fillStyle = '#1c1a24'; ctx.fillRect(0, 0, W, H);
-  // subtle centre marking
-  ctx.strokeStyle = 'rgba(245,242,232,0.05)'; ctx.lineWidth = 1;
-  octPath(r * 0.5); ctx.stroke();
+  // falls
+  for (let i = fx.falls.length-1; i >= 0; i--) { const f = fx.falls[i]; const t = (now-f.t0)/320; if (t >= 1) { fx.falls.splice(i,1); continue; }
+    const px = f.pos.x + f.vel.x*(now-f.t0)/1000, py = f.pos.y + f.vel.y*(now-f.t0)/1000, s = toScreen({ x:px, y:py });
+    ctx.globalAlpha = 1-t; ctx.beginPath(); ctx.arc(s.x, s.y + t*40, D.radius*scale*(1-t*0.7), 0, Math.PI*2); ctx.fillStyle = shade(f.color, -0.2-t*0.5); ctx.fill(); ctx.globalAlpha = 1; }
+
+  drawParticles(fx.particles, 1);
+  for (const disc of state.discs) drawDiscFighter(disc, now, dt);
+  // rings
+  for (let i = fx.rings.length-1; i >= 0; i--) { const ring = fx.rings[i]; const t = (now-ring.t0)/ring.dur; if (t >= 1) { fx.rings.splice(i,1); continue; }
+    const s = toScreen(ring.pos), ease = 1-(1-t)*(1-t); ctx.beginPath(); ctx.arc(s.x, s.y, (D.radius + ease*ring.maxR)*scale, 0, Math.PI*2);
+    ctx.strokeStyle = ring.color; ctx.globalAlpha = (1-t)*0.9; ctx.lineWidth = ring.w*(1-t)+1; ctx.stroke(); ctx.globalAlpha = 1; }
+  drawParticles(fx.embers, 0.9);
   ctx.restore();
 
-  // The advancing danger line. Redder / brighter as the arena gets small.
-  const danger = 1 - clamp((r - TUNING.arena.endRadius) / (startR - TUNING.arena.endRadius), 0, 1);
-  octPath(r);
-  ctx.strokeStyle = '#ff4d2e';
-  ctx.lineWidth = 2.5 + danger * 3.5;
-  ctx.shadowColor = '#ff4d2e'; ctx.shadowBlur = 8 + danger * 26 + (0.5 + 0.5 * Math.sin(now / 140)) * danger * 10;
-  ctx.stroke();
-  ctx.shadowBlur = 0;
-  // inner chalk marca
-  octPath(r);
-  ctx.strokeStyle = 'rgba(245,242,232,0.55)'; ctx.lineWidth = 1.5; ctx.stroke();
-
-  // falling (eliminated) discs — they don't explode, they drop.
-  for (let i = fx.falls.length - 1; i >= 0; i--) {
-    const f = fx.falls[i]; const t = (now - f.t0) / 300;
-    if (t >= 1) { fx.falls.splice(i, 1); continue; }
-    const px = f.pos.x + f.vel.x * (now - f.t0) / 1000;
-    const py = f.pos.y + f.vel.y * (now - f.t0) / 1000;
-    const s = toScreen({ x: px, y: py });
-    ctx.globalAlpha = 1 - t;
-    ctx.beginPath(); ctx.arc(s.x, s.y, D.radius * scale * (1 - t * 0.7), 0, Math.PI * 2);
-    ctx.fillStyle = f.color; ctx.fill();
-    ctx.globalAlpha = 1;
-  }
-
-  // discs
-  for (const disc of state.discs) drawDisc(disc, now);
-
-  // push / clash rings
-  for (let i = fx.rings.length - 1; i >= 0; i--) {
-    const ring = fx.rings[i]; const t = (now - ring.t0) / ring.dur;
-    if (t >= 1) { fx.rings.splice(i, 1); continue; }
-    const s = toScreen(ring.pos);
-    ctx.beginPath();
-    ctx.arc(s.x, s.y, (D.radius + t * P.range) * scale, 0, Math.PI * 2);
-    ctx.strokeStyle = ring.color; ctx.globalAlpha = (1 - t) * 0.9;
-    ctx.lineWidth = 3 * (1 - t) + 1; ctx.stroke(); ctx.globalAlpha = 1;
-  }
-
-  // parry flash
-  if (fx.flash > 0) {
-    ctx.fillStyle = `rgba(77,216,255,${fx.flash * 0.14})`; ctx.fillRect(0, 0, W, H);
-    fx.flash = Math.max(0, fx.flash - 0.08);
-  }
-
+  if (fx.flash > 0) { ctx.fillStyle = `rgba(77,216,255,${fx.flash*0.16})`; ctx.fillRect(0, 0, W, H); }
+  // vignette
+  const vg = ctx.createRadialGradient(cx, cy, Math.min(W,H)*0.35, cx, cy, Math.max(W,H)*0.75);
+  vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,0.55)'); ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
   drawHud(now);
 }
 
-function drawDisc(disc, now) {
-  if (!disc.alive) return;
-  const s = toScreen(disc.pos); const rad = D.radius * scale;
-  const color = COLORS[disc.id];
-  if (disc.ghost) {
-    ctx.beginPath(); ctx.arc(s.x, s.y, rad * 0.8, 0, Math.PI * 2);
-    ctx.fillStyle = color; ctx.globalAlpha = 0.28; ctx.fill(); ctx.globalAlpha = 1;
-    ctx.lineWidth = 2; ctx.strokeStyle = color; ctx.globalAlpha = 0.5; ctx.stroke(); ctx.globalAlpha = 1;
-    return;
-  }
-  // reflect active -> cyan halo; recovery -> red vulnerable tint
-  if (disc.reflectState === 'active') {
-    ctx.beginPath(); ctx.arc(s.x, s.y, rad + 7, 0, Math.PI * 2);
-    ctx.strokeStyle = '#4dd8ff'; ctx.lineWidth = 4;
-    ctx.shadowColor = '#4dd8ff'; ctx.shadowBlur = 16; ctx.stroke(); ctx.shadowBlur = 0;
-  } else if (disc.reflectState === 'recovery') {
-    ctx.beginPath(); ctx.arc(s.x, s.y, rad + 5, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(255,77,46,0.7)'; ctx.lineWidth = 3;
-    ctx.setLineDash([4, 4]); ctx.stroke(); ctx.setLineDash([]);
-  }
-  // body: flat circle, thick dark border
-  ctx.beginPath(); ctx.arc(s.x, s.y, rad, 0, Math.PI * 2);
-  ctx.fillStyle = color; ctx.fill();
-  ctx.lineWidth = 4; ctx.strokeStyle = '#0d0b0f'; ctx.stroke();
-
-  // cooldown rings (legible in peripheral vision — colour & shape, not numbers)
-  const tick = state.tick;
-  const pushReady = tick >= disc.pushCooldownUntil;
-  if (!pushReady) {
-    const frac = clamp((disc.pushCooldownUntil - tick) / PUSH_CD, 0, 1);
-    arc(s.x, s.y, rad + 3, -Math.PI / 2, -Math.PI / 2 + (1 - frac) * Math.PI * 2, '#f5f2e8', 2.5);
-  }
+function drawParticles(arr, glow) {
+  for (const p of arr) { const k = 1 - p.life/p.maxLife, s = toScreen(p); ctx.globalAlpha = k*glow;
+    if (glow < 1) { ctx.shadowColor = p.color; ctx.shadowBlur = 6; }
+    ctx.beginPath(); ctx.arc(s.x, s.y, p.size*scale*(0.5+k*0.5), 0, Math.PI*2); ctx.fillStyle = p.color; ctx.fill(); ctx.shadowBlur = 0; }
+  ctx.globalAlpha = 1;
 }
-function arc(x, y, r, a0, a1, color, w) {
-  ctx.beginPath(); ctx.arc(x, y, r, a0, a1); ctx.strokeStyle = color; ctx.lineWidth = w; ctx.stroke();
+
+function drawFighter(x, y, Rr, s) {
+  const f = s.facing, fx1 = Math.cos(f), fy1 = Math.sin(f), px = -fy1, py = fx1;
+  const bob = Math.sin(s.walkPhase)*s.moving*Rr*0.08, sq = s.squash;
+  const bodyRx = Rr*(1+sq*0.28), bodyRy = Rr*(1-sq*0.22);
+  ctx.save();
+  ctx.beginPath(); ctx.ellipse(x, y + Rr*0.62, Rr*0.98, Rr*0.42, 0, 0, Math.PI*2); ctx.fillStyle = 'rgba(0,0,0,0.38)'; ctx.fill();
+  const yc = y + bob;
+  const thrust = s.pushing*Rr*0.5, swing = Math.sin(s.walkPhase)*s.moving*Rr*0.12, armR = Rr*0.34, armDark = shade(s.color, -0.34);
+  for (const side of [-1, 1]) {
+    const ax = x + px*side*Rr*0.72 + fx1*(thrust + (side>0?swing:-swing)), ay = yc + py*side*Rr*0.72 + fy1*(thrust + (side>0?swing:-swing));
+    ctx.beginPath(); ctx.ellipse(ax, ay, armR, armR*0.85, f, 0, Math.PI*2); ctx.fillStyle = armDark; ctx.fill(); ctx.lineWidth = Rr*0.12; ctx.strokeStyle = '#0d0b0f'; ctx.stroke();
+  }
+  const grad = ctx.createRadialGradient(x - Rr*0.35, yc - Rr*0.4, Rr*0.15, x, yc, Rr*1.15);
+  grad.addColorStop(0, shade(s.color, 0.42)); grad.addColorStop(0.55, s.color); grad.addColorStop(1, shade(s.color, -0.28));
+  ctx.beginPath(); ctx.ellipse(x, yc, bodyRx, bodyRy, 0, 0, Math.PI*2); ctx.fillStyle = grad; ctx.fill(); ctx.lineWidth = Rr*0.16; ctx.strokeStyle = '#0d0b0f'; ctx.stroke();
+  ctx.beginPath(); ctx.ellipse(x - Rr*0.28, yc - Rr*0.3, Rr*0.32, Rr*0.22, -0.5, 0, Math.PI*2); ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.fill();
+  ctx.save(); ctx.beginPath(); ctx.ellipse(x, yc, bodyRx, bodyRy, 0, 0, Math.PI*2); ctx.clip(); ctx.translate(x, yc); ctx.rotate(f + Math.PI/2);
+  ctx.beginPath(); ctx.rect(-Rr*1.2, Rr*0.12, Rr*2.4, Rr*0.42); ctx.fillStyle = shade(s.color, -0.5); ctx.fill(); ctx.restore();
+  const hx = x + fx1*Rr*0.5, hy = yc + fy1*Rr*0.5 - Rr*0.12, hR = Rr*0.44;
+  ctx.beginPath(); ctx.arc(hx - fx1*hR*0.5, hy - fy1*hR*0.5 - Rr*0.08, hR*0.45, 0, Math.PI*2); ctx.fillStyle = '#241f2b'; ctx.fill();
+  ctx.beginPath(); ctx.arc(hx, hy, hR, 0, Math.PI*2);
+  const hg = ctx.createRadialGradient(hx - hR*0.3, hy - hR*0.4, hR*0.2, hx, hy, hR); hg.addColorStop(0, '#f2d9b8'); hg.addColorStop(1, '#d9a877');
+  ctx.fillStyle = hg; ctx.fill(); ctx.lineWidth = Rr*0.12; ctx.strokeStyle = '#0d0b0f'; ctx.stroke();
+  const ex = hx + fx1*hR*0.35, ey = hy + fy1*hR*0.35; ctx.fillStyle = '#0d0b0f';
+  for (const side of [-1, 1]) { ctx.beginPath(); ctx.arc(ex + px*side*hR*0.4, ey + py*side*hR*0.4, hR*0.16, 0, Math.PI*2); ctx.fill(); }
+  ctx.restore();
+}
+function drawGhostFighter(x, y, Rr, color, ph) {
+  const wob = Math.sin(ph*2)*Rr*0.08; ctx.save(); ctx.globalAlpha = 0.5;
+  ctx.beginPath(); ctx.moveTo(x - Rr*0.7, y + wob); ctx.quadraticCurveTo(x, y + Rr*0.9 + wob, x + Rr*0.7, y + wob); ctx.quadraticCurveTo(x, y + Rr*0.3, x - Rr*0.7, y + wob); ctx.fillStyle = color; ctx.fill();
+  ctx.beginPath(); ctx.arc(x, y - Rr*0.15 + wob, Rr*0.7, Math.PI, Math.PI*2); ctx.fill();
+  ctx.globalAlpha = 0.85; ctx.fillStyle = '#0d0b0f'; ctx.beginPath(); ctx.arc(x - Rr*0.25, y - Rr*0.2 + wob, Rr*0.12, 0, Math.PI*2); ctx.arc(x + Rr*0.25, y - Rr*0.2 + wob, Rr*0.12, 0, Math.PI*2); ctx.fill(); ctx.restore();
+}
+
+function drawDiscFighter(disc, now, dt) {
+  if (!disc.alive) return;
+  const s = toScreen(disc.pos), rad = D.radius*scale, color = COLORS[disc.id];
+  if (disc.ghost) { drawGhostFighter(s.x, s.y, rad, color, now/500); return; }
+  // anim state
+  let st = fx.anim[disc.id]; if (!st) { st = { facing: Math.atan2(disc.pos.y, disc.pos.x)+Math.PI, walkPhase: 0, push: 0 }; fx.anim[disc.id] = st; }
+  const speed = Math.hypot(disc.vel.x, disc.vel.y);
+  if (speed > 12) st.facing = lerpAngle(st.facing, Math.atan2(disc.vel.y, disc.vel.x), 1 - Math.exp(-14*dt));
+  st.walkPhase += dt*(6 + (speed/D.maxSpeed)*14);
+  const pushing = state.tick < disc.pushAnimUntil && state.tick >= disc.pushAnimUntil - PUSH_ANIM;
+  st.push += ((pushing?1:0) - st.push)*(1 - Math.exp(-18*dt));
+  // reflect aura
+  if (disc.reflectState === 'active') { const pulse = 0.5+0.5*Math.sin(now/60);
+    ctx.beginPath(); ctx.arc(s.x, s.y, rad+9+pulse*3, 0, Math.PI*2); ctx.strokeStyle = '#4dd8ff'; ctx.lineWidth = 4; ctx.shadowColor = '#4dd8ff'; ctx.shadowBlur = 20; ctx.stroke(); ctx.shadowBlur = 0;
+    ctx.beginPath(); ctx.arc(s.x, s.y, rad+9+pulse*3, 0, Math.PI*2); ctx.fillStyle = `rgba(77,216,255,${0.08+pulse*0.06})`; ctx.fill();
+  } else if (disc.reflectState === 'recovery') { ctx.beginPath(); ctx.arc(s.x, s.y, rad+6, 0, Math.PI*2); ctx.strokeStyle = 'rgba(255,77,46,0.75)'; ctx.lineWidth = 3; ctx.setLineDash([5,5]); ctx.stroke(); ctx.setLineDash([]); }
+  const moving = clamp(speed/D.maxSpeed, 0, 1);
+  if (moving > 0.35 && Math.random() < 0.4) { const nd = normalize(disc.vel);
+    fx.particles.push({ x: disc.pos.x - nd.x*20, y: disc.pos.y - nd.y*20, vx: -nd.x*30 + (Math.random()-0.5)*40, vy: -nd.y*30 + (Math.random()-0.5)*40, life: 0, maxLife: 0.4+Math.random()*0.3, size: 2+Math.random()*3, color: shade(color, -0.3), drag: 4 }); }
+  drawFighter(s.x, s.y, rad, { color, facing: st.facing, moving, walkPhase: st.walkPhase, pushing: st.push, squash: st.push*0.4 });
+  // push cooldown arc
+  if (state.tick < disc.pushCooldownUntil) { const frac = clamp((disc.pushCooldownUntil - state.tick)/PUSH_CD, 0, 1);
+    ctx.beginPath(); ctx.arc(s.x, s.y, rad+4, -Math.PI/2, -Math.PI/2 + (1-frac)*Math.PI*2); ctx.strokeStyle = '#f5f2e8'; ctx.lineWidth = 3; ctx.lineCap='round'; ctx.stroke(); ctx.lineCap='butt'; }
 }
 
 function drawHud(now) {
-  // scoreboard strip
-  ctx.font = "700 15px 'Archivo Black', system-ui, sans-serif";
   ctx.textBaseline = 'middle';
-  const n = match.playerCount; const gap = 150; const total = (n - 1) * gap;
-  let x = W / 2 - total / 2;
+  const n = match.playerCount, gap = Math.min(180, (W-40)/n), total = (n-1)*gap; let x = W/2 - total/2;
   for (let i = 0; i < n; i++) {
-    ctx.textAlign = 'center';
     const alive = state.discs[i] && state.discs[i].alive && !state.discs[i].ghost;
-    ctx.globalAlpha = alive ? 1 : 0.4;
-    ctx.beginPath(); ctx.arc(x - 40, 26, 7, 0, Math.PI * 2); ctx.fillStyle = COLORS[i]; ctx.fill();
-    ctx.fillStyle = '#f5f2e8'; ctx.textAlign = 'left';
-    ctx.fillText(`${NAMES[i]}  ${match.scores[i]}`, x - 28, 26);
-    ctx.globalAlpha = 1;
-    x += gap;
+    ctx.globalAlpha = alive || phase !== 'playing' ? 1 : 0.4;
+    ctx.beginPath(); ctx.arc(x - 52, 26, 7, 0, Math.PI*2); ctx.fillStyle = COLORS[i]; ctx.shadowColor = COLORS[i]; ctx.shadowBlur = alive && phase === 'playing' ? 10 : 0; ctx.fill(); ctx.shadowBlur = 0;
+    ctx.fillStyle = '#f5f2e8'; ctx.textAlign = 'left'; ctx.font = "700 14px 'Archivo Black', system-ui, sans-serif"; ctx.fillText(NAMES[i], x - 40, 20);
+    ctx.font = "800 13px 'JetBrains Mono', ui-monospace, monospace"; ctx.fillStyle = COLORS[i]; ctx.fillText('◆'.repeat(match.scores[i]) + '◇'.repeat(Math.max(0, 3 - match.scores[i])), x - 40, 34);
+    ctx.globalAlpha = 1; x += gap;
   }
-
-  // round timer / countdown
-  ctx.textAlign = 'center'; ctx.fillStyle = '#6d6880';
-  ctx.font = "600 13px 'JetBrains Mono', monospace";
-  if (phase === 'countdown') {
-    const left = Math.ceil((countdownEndsMs - now) / 1000);
-    ctx.font = "900 90px 'Archivo Black', system-ui, sans-serif";
-    ctx.fillStyle = '#f5f2e8';
-    ctx.fillText(left > 0 ? String(left) : 'VAI!', W / 2, cy);
-  } else if (phase === 'playing') {
-    const left = Math.max(0, (MAX_ROUND - (state.tick - state.roundStartTick)) / TICK_RATE);
-    ctx.fillText(left.toFixed(1) + 's', W / 2, 50);
-  } else if (phase === 'round_end') {
-    ctx.font = "900 44px 'Archivo Black', system-ui, sans-serif";
-    ctx.fillStyle = lastWinner >= 0 ? COLORS[lastWinner] : '#6d6880';
-    ctx.fillText(lastWinner >= 0 ? `${NAMES[lastWinner]} venceu a rodada` : 'Empate', W / 2, cy);
-  }
+  ctx.textAlign = 'center';
+  if (phase === 'countdown') { const left = Math.ceil((countdownEndsMs - now)/1000); ctx.font = "900 92px 'Archivo Black', system-ui, sans-serif"; ctx.fillStyle = '#f5f2e8'; ctx.shadowColor = '#ff4d2e'; ctx.shadowBlur = 24; ctx.fillText(left > 0 ? String(left) : 'VAI!', W/2, cy); ctx.shadowBlur = 0; }
+  else if (phase === 'playing') { const left = Math.max(0, (MAX_ROUND - (state.tick - state.roundStartTick))/TICK_RATE); const urgent = left < 10; ctx.font = "700 15px 'JetBrains Mono', ui-monospace, monospace"; ctx.fillStyle = urgent ? '#ff4d2e' : '#8d8898'; if (urgent) { ctx.shadowColor = '#ff4d2e'; ctx.shadowBlur = 12; } ctx.fillText(left.toFixed(1)+'s', W/2, 52); ctx.shadowBlur = 0; }
+  else if (phase === 'round_end') { ctx.font = "900 44px 'Archivo Black', system-ui, sans-serif"; ctx.fillStyle = lastWinner >= 0 ? COLORS[lastWinner] : '#8d8898'; ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 12; ctx.fillText(lastWinner >= 0 ? `${NAMES[lastWinner]} venceu a rodada` : 'Empate', W/2, cy); ctx.shadowBlur = 0; }
 }
 
 // ---- overlay / menu ---------------------------------------------------------
-const overlay = document.getElementById('overlay');
-const panel = document.getElementById('panel');
-const msg = document.getElementById('msg');
-const keysEl = document.getElementById('keys');
-const menuButtons = document.getElementById('menuButtons');
-const nextButtons = document.getElementById('nextButtons');
-
+const overlay = document.getElementById('overlay'), panel = document.getElementById('panel');
+const msg = document.getElementById('msg'), keysEl = document.getElementById('keys');
+const menuButtons = document.getElementById('menuButtons'), nextButtons = document.getElementById('nextButtons');
 function renderKeyLegend(n) {
   keysEl.innerHTML = '';
-  for (let i = 0; i < n; i++) {
-    const div = document.createElement('div'); div.className = 'k';
-    div.innerHTML = `<span class="swatch" style="background:${COLORS[i]}"></span>
-      <span><b>${NAMES[i]}</b> — ${KEYMAP[i].label}</span>`;
-    keysEl.appendChild(div);
-  }
+  for (let i = 0; i < n; i++) { const div = document.createElement('div'); div.className = 'k';
+    div.innerHTML = `<span class="swatch" style="background:${COLORS[i]};color:${COLORS[i]}"></span><span><b>${NAMES[i]}</b> — ${KEYMAP[i].label}</span>`; keysEl.appendChild(div); }
 }
 function showOverlay(v) { overlay.style.display = v ? 'flex' : 'none'; }
-
-menuButtons.querySelectorAll('button').forEach((b) =>
-  b.addEventListener('click', () => {
-    match.playerCount = +b.dataset.n;
-    match.scores = Array(match.playerCount).fill(0);
-    match.roundIndex = 0;
-    startRound();
-  }));
-document.getElementById('btnNext').addEventListener('click', () => {
-  match.playerCount = match.playerCount;
-  match.scores = Array(match.playerCount).fill(0);
-  match.roundIndex = 0;
-  startRound();
-});
-
+menuButtons.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
+  match.playerCount = +b.dataset.n; match.scores = Array(match.playerCount).fill(0); match.roundIndex = 0; startRound();
+}));
+document.getElementById('btnNext').addEventListener('click', () => { match.scores = Array(match.playerCount).fill(0); match.roundIndex = 0; startRound(); });
 function showMatchEnd() {
-  if (overlay.style.display === 'flex') return;
-  showOverlay(true);
-  menuButtons.classList.add('hidden'); nextButtons.classList.remove('hidden');
-  keysEl.innerHTML = '';
-  const w = lastWinner;
-  panel.querySelector('h1').innerHTML = `${NAMES[w]}<span class="sub" style="color:${COLORS[w]}">venceu a partida</span>`;
+  if (overlay.style.display === 'flex') return; showOverlay(true);
+  menuButtons.classList.add('hidden'); nextButtons.classList.remove('hidden'); keysEl.innerHTML = '';
+  const w = lastWinner; panel.querySelector('h1').innerHTML = `${NAMES[w]}<span class="sub" style="color:${COLORS[w]}">venceu a partida</span>`;
   msg.innerHTML = `Placar final: ${match.scores.map((s, i) => `${NAMES[i]} ${s}`).join(' · ')}`;
 }
-
-// initial legend preview (3 players default)
 renderKeyLegend(3);
 requestAnimationFrame(frame);
 </script>

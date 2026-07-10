@@ -12,5 +12,10 @@
   "devDependencies": {
     "typescript": "^5.7.2",
     "vite": "^5.4.11"
+  },
+  "dependencies": {
+    "@fontsource-variable/archivo": "^5.2.8",
+    "@fontsource/archivo-black": "^5.2.8",
+    "@fontsource/jetbrains-mono": "^5.2.8"
   }
 }

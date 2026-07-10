@@ -1,6 +1,10 @@
 // Client entry point: screen flow (home -> lobby -> match -> end), the render
 // loop, and the fixed-step input pump that feeds prediction.
 
+import '@fontsource/archivo-black';
+import '@fontsource-variable/archivo';
+import '@fontsource/jetbrains-mono/500.css';
+import '@fontsource/jetbrains-mono/700.css';
 import './style.css';
 import { NetClient } from './net';
 import { InputController } from './input';
@@ -151,7 +155,7 @@ function renderLobby(code: string, players: PlayerInfo[], _hostId: string): void
   lobbyPlayers.innerHTML = '';
   for (const p of players) {
     const li = document.createElement('li');
-    li.innerHTML = `<span class="dot" style="background:${p.color}"></span>
+    li.innerHTML = `<span class="dot" style="background:${p.color};color:${p.color}"></span>
       <span class="pname">${escapeHtml(p.nickname)}</span>
       ${p.isHost ? '<span class="host">host</span>' : ''}
       ${p.connected ? '' : '<span class="off">offline</span>'}`;
@@ -186,7 +190,7 @@ function showEnd(): void {
     ? `<span style="color:${net.colorOf(w)}">${escapeHtml(net.nicknameOf(w))}</span> venceu`
     : 'Fim de partida';
   endScores.innerHTML = net.players
-    .map((p) => `<div><span class="dot" style="background:${p.color}"></span> ${escapeHtml(p.nickname)} — <b>${scores[p.id] ?? 0}</b></div>`)
+    .map((p) => `<div><span class="dot" style="background:${p.color};color:${p.color}"></span> ${escapeHtml(p.nickname)} — <b>${scores[p.id] ?? 0}</b></div>`)
     .join('');
   btnAgain.classList.toggle('hidden', !net.isHost);
   showScreen('end');
@@ -217,13 +221,10 @@ function loop(now: number): void {
   }
 
   if (net && net.phase !== 'lobby' && net.phase !== 'match_end') render(now);
-  effects.decay();
+  effects.update(dt / 1000);
 }
 
 function render(now: number): void {
-  if (effects.isFrozen(now)) {
-    // hold the frame during hitstop; still redraw so the flash paints
-  }
   const discs = net.getRenderDiscs(now);
   const roundElapsed = net.clientTick - net.roundStartTick;
   const roundTimeLeft = Math.max(0, (MAX_ROUND_TICKS - roundElapsed) / 60);
