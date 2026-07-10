@@ -87,40 +87,71 @@ npm run typecheck
 
 ---
 
-## Empacotar para a App Store (Capacitor)
+## Empacotar como app (Capacitor)
 
-O cliente já está configurado como app iOS via **Capacitor**
-([`client/capacitor.config.ts`](client/capacitor.config.ts)). O projeto nativo
-`ios/` é gerado na sua máquina (precisa de **macOS + Xcode + CocoaPods**) — ele
-não é versionado; você o regenera.
+O cliente já está configurado como app via **Capacitor**
+([`client/capacitor.config.ts`](client/capacitor.config.ts)) — mesmo código web,
+empacotado em iOS e/ou Android.
+
+### Não tenho Mac — e agora? (o caminho recomendado)
+
+**Você não precisa de Mac.** O único passo que exige macOS é compilar/assinar o
+`.ipa`, e isso roda **na nuvem** via **Codemagic** — que aluga um Mac por build.
+Já deixei o pipeline pronto em [`codemagic.yaml`](codemagic.yaml).
+
+O que você precisa (tudo pelo navegador):
+
+1. **Conta no Apple Developer Program** — US$99/ano. É o único custo inevitável
+   pra publicar na App Store (não tem como fugir disso, com ou sem Mac).
+2. **Conta no [Codemagic](https://codemagic.io)** — tem free tier (500 min/mês).
+   Conecte este repositório.
+3. No App Store Connect, gere uma **API Key** (Users and Access → Integrations) e
+   cadastre no Codemagic como integração `app_store_connect`. O Codemagic
+   **cria e gerencia os certificados e provisioning profiles sozinho** — era isso
+   que antigamente obrigava a ter um Mac (Keychain). Hoje é automático.
+4. Rode o workflow `ios-capacitor`. Ele faz: build web → `cap add ios` →
+   `cap sync` → gera ícones/splash → assina → **envia pro TestFlight**.
+
+Do TestFlight você testa no seu iPhone e promove pra App Store — tudo do navegador.
+
+### Alternativa sem Apple: Android
+
+Android **não precisa de Mac nem de conta Apple**. Build roda em Linux/Windows
+(ou no próprio Codemagic). Custo: US$25 uma vez (Google Play).
 
 ```bash
 cd client
-npm run build                 # gera dist/ (defina VITE_WS_URL p/ online, veja abaixo)
+npm run build
+npm run cap:add:android    # cria client/android/ (uma vez)
+npm run cap:sync:android   # copia o web pro projeto nativo
+# abra client/android/ no Android Studio (Windows/Linux) → Build → gerar AAB
+```
+
+### Se você (ou um amigo) tiver um Mac
+
+```bash
+cd client
+npm run build                 # defina VITE_WS_URL p/ online (veja abaixo)
 npm run cap:add:ios           # cria client/ios/ (uma vez)
 npm run cap:sync              # build + copia web pro projeto nativo
 npm run cap:assets            # gera ícones/splash a partir de client/assets/
-npm run cap:open              # abre o Xcode
+npm run cap:open              # abre o Xcode → Archive → Distribute
 ```
 
-No Xcode: selecione seu *Team* de assinatura, ajuste o *Bundle Identifier*
-(`com.matheus.octogono`), e *Archive → Distribute App* para o TestFlight/App Store.
+### Detalhes que valem
 
 - **Ícone e splash**: fontes prontas em [`client/assets/`](client/assets)
   (`icon-only.png` 1024², `splash.png`/`splash-dark.png` 2732²). O
-  `cap:assets` (`@capacitor/assets`) gera todos os tamanhos que a Apple exige.
+  `@capacitor/assets` gera todos os tamanhos exigidos.
 - **Notch / safe-area**: a UI respeita `env(safe-area-inset-*)`; o canvas é
   full-bleed e o placar é deslocado pela inset do topo.
-- **Solo funciona offline** sem qualquer configuração. Para habilitar o **online
-  no app**, faça o build apontando pro seu servidor implantado:
+- **Solo funciona offline** sem configuração alguma — ótimo pra aprovação na
+  loja (o revisor não depende do seu servidor estar no ar). Pro **online no app**,
+  builde apontando pro servidor implantado:
 
   ```bash
   VITE_WS_URL="wss://seu-servidor" npm run build && npm run cap:sync
   ```
-
-**CI**: [`codemagic.yaml`](codemagic.yaml) tem um workflow que faz build, assina
-e publica no TestFlight — configure os grupos de assinatura/App Store Connect no
-painel do Codemagic (como no PRD).
 
 ---
 
