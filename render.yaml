@@ -1,0 +1,24 @@
+# Deploy do servidor WebSocket no Render (free tier).
+# Só é necessário para o modo ONLINE — o modo solo roda offline no app.
+#
+# Como usar:
+#   1. render.com → New → Blueprint → aponte pra este repositório.
+#   2. Render lê este arquivo, builda via Dockerfile e sobe o serviço.
+#   3. A URL será algo como https://octogono.onrender.com
+#      → no build do app: VITE_WS_URL="wss://octogono.onrender.com"
+#
+# Atenção (free tier): o serviço DORME após ~15 min sem tráfego; a primeira
+# conexão depois disso leva ~30–60s (cold start). Para manter acordado, aponte
+# um cron externo grátis (ex.: cron-job.org) pro endpoint /health a cada 10 min.
+services:
+  - type: web
+    name: octogono
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true
+    # Render injeta a env PORT automaticamente; o servidor já lê process.env.PORT.
+    envVars:
+      - key: NODE_ENV
+        value: production
