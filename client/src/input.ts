@@ -1,5 +1,9 @@
 // Input: keyboard (desktop) + virtual joystick & two buttons (mobile).
-// One stick, two buttons. Nothing more (PRD §5).
+// One stick, two buttons: A = empurrar (push), B = refletir (reflect). PRD §5.
+// The buttons show their cooldown on themselves (a radial that drains), and a
+// press during cooldown reads as "denied" instead of a real fire.
+
+import { hapticPress } from './haptics';
 
 export interface InputState {
   dir: { x: number; y: number };
@@ -21,6 +25,9 @@ export class InputController {
   private joyPointerId: number | null = null;
   private joyCenter = { x: 0, y: 0 };
 
+  private pushFrac = 0;
+  private reflectFrac = 0;
+
   constructor(root: HTMLElement) {
     window.addEventListener('keydown', (e) => {
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
@@ -35,8 +42,8 @@ export class InputController {
     this.reflectBtn = root.querySelector('#reflectBtn')!;
 
     this.setupJoystick();
-    this.setupButton(this.pushBtn, (v) => (this.touchPush = v));
-    this.setupButton(this.reflectBtn, (v) => (this.touchReflect = v));
+    this.setupButton(this.pushBtn, 'push', (v) => (this.touchPush = v));
+    this.setupButton(this.reflectBtn, 'reflect', (v) => (this.touchReflect = v));
   }
 
   private setupJoystick(): void {
@@ -50,13 +57,14 @@ export class InputController {
       this.joyBase.style.left = `${e.clientX}px`;
       this.joyBase.style.top = `${e.clientY}px`;
       this.joyBase.style.opacity = '1';
+      this.joyStick.classList.remove('releasing');
       this.joyStick.style.transform = 'translate(-50%, -50%)';
       zone.setPointerCapture(e.pointerId);
     };
     const onMove = (e: PointerEvent) => {
       if (e.pointerId !== this.joyPointerId) return;
-      let dx = e.clientX - this.joyCenter.x;
-      let dy = e.clientY - this.joyCenter.y;
+      const dx = e.clientX - this.joyCenter.x;
+      const dy = e.clientY - this.joyCenter.y;
       const len = Math.hypot(dx, dy);
       const clamped = Math.min(len, maxR);
       const nx = len > 0 ? dx / len : 0;
@@ -72,6 +80,8 @@ export class InputController {
       this.joyActive = false;
       this.joyDir = { x: 0, y: 0 };
       this.joyBase.style.opacity = '0';
+      // ease the knob home instead of snapping
+      this.joyStick.classList.add('releasing');
       this.joyStick.style.transform = 'translate(-50%, -50%)';
     };
     zone.addEventListener('pointerdown', onDown);
@@ -80,11 +90,22 @@ export class InputController {
     zone.addEventListener('pointercancel', onUp);
   }
 
-  private setupButton(el: HTMLElement, set: (v: boolean) => void): void {
+  private setupButton(el: HTMLElement, kind: 'push' | 'reflect', set: (v: boolean) => void): void {
     el.addEventListener('pointerdown', (e) => {
       e.preventDefault();
+      // Always mirror the button into the input signal (holding through a
+      // cooldown auto-fires the instant it's ready). Feedback is cosmetic:
+      // a fire when ready, a "denied" nudge when still cooling.
       set(true);
-      el.classList.add('pressed');
+      const cooling = (kind === 'push' ? this.pushFrac : this.reflectFrac) > 0.001;
+      if (cooling) {
+        el.classList.remove('pressed');
+        el.classList.add('denied');
+        setTimeout(() => el.classList.remove('denied'), 130);
+      } else {
+        el.classList.add('pressed');
+        hapticPress();
+      }
     });
     const release = () => {
       set(false);
@@ -93,6 +114,25 @@ export class InputController {
     el.addEventListener('pointerup', release);
     el.addEventListener('pointercancel', release);
     el.addEventListener('pointerleave', release);
+  }
+
+  // Drive the on-button cooldown radials from the self disc's state (0 = ready,
+  // 1 = just fired). Called once per frame from the render loop.
+  setCooldowns(pushFrac: number, reflectFrac: number): void {
+    this.applyCooldown(this.pushBtn, pushFrac, this.pushFrac);
+    this.applyCooldown(this.reflectBtn, reflectFrac, this.reflectFrac);
+    this.pushFrac = pushFrac;
+    this.reflectFrac = reflectFrac;
+  }
+
+  private applyCooldown(el: HTMLElement, frac: number, prev: number): void {
+    el.style.setProperty('--cd', String(frac));
+    el.classList.toggle('cooling', frac > 0.001);
+    // ready edge (was cooling, now ready) -> brief pulse
+    if (prev > 0.001 && frac <= 0.001) {
+      el.classList.add('ready');
+      setTimeout(() => el.classList.remove('ready'), 220);
+    }
   }
 
   sample(): InputState {

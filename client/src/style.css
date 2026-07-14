@@ -205,21 +205,45 @@ button.ghost { border-color: var(--line); font-size: 12px; padding: 9px 16px; wi
   border-radius: 50%; background: rgba(245, 242, 232, 0.9); transform: translate(-50%, -50%);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
 }
+.joystick.releasing { transition: transform 0.14s cubic-bezier(0.2, 0.9, 0.3, 1); }
+
 .buttons { position: absolute; right: calc(26px + env(safe-area-inset-right));
-  bottom: calc(38px + env(safe-area-inset-bottom)); display: flex; flex-direction: column;
-  align-items: center; gap: 20px; pointer-events: none; }
+  bottom: calc(clamp(38px, 9vh, 62px) + env(safe-area-inset-bottom)); display: flex; flex-direction: column;
+  align-items: center; gap: 22px; pointer-events: none;
+  --btn-a: clamp(90px, 24vw, 112px); --btn-b: clamp(74px, 19vw, 90px); }
 .btn {
-  pointer-events: auto; display: flex; align-items: center; justify-content: center;
-  border-radius: 50%; font-size: 26px; color: var(--void); font-weight: 900;
-  border: 2px solid rgba(0, 0, 0, 0.35); transition: transform 0.05s, filter 0.05s;
+  pointer-events: auto; position: relative; --cd: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  border-radius: 50%; color: var(--void); border: 2px solid rgba(0, 0, 0, 0.4);
+  transition: transform 0.05s, filter 0.05s, opacity 0.12s;
   box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.6), inset 0 2px 0 rgba(255, 255, 255, 0.35);
 }
-.btn.push { width: 100px; height: 100px; background: radial-gradient(circle at 40% 30%, #ff6a3d, #ff4d2e); color: #fff; font-size: 36px; }
-.btn.reflect { width: 70px; height: 70px; background: radial-gradient(circle at 40% 30%, #7ee6ff, #4dd8ff); }
+.btn .glyph { font-family: var(--display); line-height: 1; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5); }
+.btn .cap { font-family: var(--mono); font-weight: 700; font-size: 10px; letter-spacing: 0.04em;
+  margin-top: 3px; opacity: 0.85; text-transform: lowercase; }
+/* cooldown radial ON the button — a dark wedge that drains as it recovers */
+.btn::after { content: ''; position: absolute; inset: -2px; border-radius: 50%; pointer-events: none;
+  background: conic-gradient(from -90deg, rgba(8, 6, 10, 0.62) calc(var(--cd) * 360deg), transparent 0); }
+.btn.push { width: var(--btn-a); height: var(--btn-a);
+  background: radial-gradient(circle at 40% 30%, #ff6a3d, #ff4d2e); color: #fff; }
+.btn.push .glyph { font-size: 40px; }
+.btn.reflect { width: var(--btn-b); height: var(--btn-b);
+  background: radial-gradient(circle at 40% 30%, #7ee6ff, #4dd8ff); }
+.btn.reflect .glyph { font-size: 30px; }
 .btn.pressed { transform: scale(0.9); filter: brightness(1.3); }
+.btn.cooling { opacity: 0.62; filter: saturate(0.7); }
+.btn.ready { animation: btn-ready 0.2s ease; }
+.btn.denied { animation: btn-deny 0.13s ease; }
+@keyframes btn-ready { 0% { filter: brightness(1); } 45% { filter: brightness(1.7); } 100% { filter: brightness(1); } }
+@keyframes btn-deny { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
 
-@media (pointer: fine) { #hud { display: none !important; } }
+/* HUD is hidden on desktop (mouse) — but `body.force-touch` forces it on so the
+   controls can be previewed/tested in a normal browser (?touch). */
+@media (pointer: fine) { #hud { display: none; } }
+body.force-touch #hud { display: block !important; }
 
 @media (prefers-reduced-motion: reduce) {
   #bg .glow, #bg .oct, #bg .mote, .panel, .players li { animation: none; }
+  .btn.ready, .btn.denied { animation: none; }
+  .joystick.releasing { transition: none; }
 }

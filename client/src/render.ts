@@ -287,6 +287,9 @@ export class Renderer {
         continue;
       }
 
+      // a soft ground spotlight in your colour makes "you" unmistakable in a scrum
+      if (d.isSelf) this.selfSpotlight(s.x, s.y, rad, color, now);
+
       // reflect states drawn under the fighter for a clear read
       this.reflectAura(d, s.x, s.y, rad, now);
 
@@ -351,6 +354,22 @@ export class Renderer {
       ctx.stroke();
       ctx.setLineDash([]);
     }
+  }
+
+  private selfSpotlight(x: number, y: number, rad: number, color: string, now: number): void {
+    const ctx = this.ctx;
+    const pulse = 0.85 + 0.15 * Math.sin(now / 500);
+    const R = rad * 2.4 * pulse;
+    const g = ctx.createRadialGradient(x, y, rad * 0.3, x, y, R);
+    g.addColorStop(0, color);
+    g.addColorStop(1, 'transparent');
+    ctx.save();
+    ctx.globalAlpha = 0.22;
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(x, y, R, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
   }
 
   private selfMarker(x: number, y: number, rad: number, now: number): void {

@@ -15,8 +15,21 @@ import { InputController } from './input';
 import { Effects } from './effects';
 import { Renderer } from './render';
 import { initNative, isNative } from './native';
+import { hapticPushLand, hapticReflectHit, hapticEliminated } from './haptics';
 import { TUNING, MAX_ROUND_TICKS } from '../../shared/tuning';
-import type { PlayerInfo, Phase } from '../../shared/protocol';
+import type { PlayerInfo, Phase, SimEventKind } from '../../shared/protocol';
+
+const PUSH_CD_TICKS = Math.round((TUNING.push.cooldown / 1000) * 60);
+const REFLECT_CD_TICKS = Math.round((TUNING.reflect.cooldown / 1000) * 60);
+const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
+
+// Outcome haptics — only for events that involve the local player.
+function outcomeHaptic(kind: SimEventKind, playerId: string, selfId: string): void {
+  if (playerId !== selfId) return;
+  if (kind === 'push') hapticPushLand();
+  else if (kind === 'clash' || kind === 'reflect') hapticReflectHit();
+  else if (kind === 'eliminated') hapticEliminated();
+}
 
 // In Vite dev the client is on :5173 and the server on :8787 (different origin).
 // When the server serves the built client, WebSocket shares the page's origin.
@@ -94,6 +107,7 @@ const preCode = params.get('sala');
 if (preCode) codeInput.value = preCode.toUpperCase();
 nickInput.value = sessionStorage.getItem('octogono_nick') ?? '';
 const lagMs = Number(params.get('lat')) || 0; // ?lat=120 simulates 120ms latency
+if (params.has('touch')) document.body.classList.add('force-touch'); // preview mobile HUD on desktop
 
 // ---- online (NetClient) ----------------------------------------------------
 function makeNet(): NetClient {
@@ -124,7 +138,10 @@ function makeNet(): NetClient {
         scores = sc;
         showEnd();
       },
-      onEvent: (e) => effects.handle(e, (id) => net!.colorOf(id), performance.now()),
+      onEvent: (e) => {
+        effects.handle(e, (id) => net!.colorOf(id), performance.now());
+        outcomeHaptic(e.kind, e.playerId, net!.playerId);
+      },
       onPhase: () => {},
     },
     lagMs,
@@ -302,7 +319,10 @@ function loop(now: number): void {
       while (acc >= STEP && n < MAX_STEPS) {
         const s = inputCtl.sample();
         const events = local.step({ dir: s.dir, push: s.push, reflect: s.reflect });
-        for (const e of events) effects.handle(e, (id) => local!.colorOf(id), now);
+        for (const e of events) {
+          effects.handle(e, (id) => local!.colorOf(id), now);
+          outcomeHaptic(e.kind, e.playerId, local!.playerId);
+        }
         acc -= STEP;
         n++;
         if (local.isMatchOver) break;
@@ -325,6 +345,12 @@ function render(now: number): void {
   const isLocal = mode === 'local';
   const src = isLocal ? local! : net!;
   const discs = src.getRenderDiscs(now);
+  // feed the on-button cooldown radials from the self disc
+  const me = discs.find((d) => d.isSelf);
+  inputCtl.setCooldowns(
+    me ? clamp01((me.pushCooldownUntil - src.clientTick) / PUSH_CD_TICKS) : 0,
+    me ? clamp01((me.reflectCooldownUntil - src.clientTick) / REFLECT_CD_TICKS) : 0,
+  );
   const roundTimeLeft = Math.max(0, (MAX_ROUND_TICKS - (src.clientTick - src.roundStartTick)) / 60);
   const countdownLeft = isLocal
     ? Math.max(0, (src.roundStartTick - src.clientTick) / 60)
