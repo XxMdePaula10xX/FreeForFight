@@ -63,6 +63,7 @@ export interface RenderInput {
   roundWinnerId: string | null;
   matchWinnerId: string | null;
   scoreToWin: number;
+  corePresent: boolean;
 }
 
 interface AnimState {
@@ -141,6 +142,7 @@ export class Renderer {
     const r = input.arenaRadius;
     this.drawFloor(r, now);
     this.drawBorder(r, now, effects);
+    if (input.corePresent) this.drawCore(now);
     this.drawFalls(effects, now);
     this.drawParticles(effects, effects.particles, 1);
     this.drawFighters(input, effects, dt, now);
@@ -335,6 +337,19 @@ export class Renderer {
         squash: st.push * 0.4,
       });
 
+      // armed with a Super Empurrão (picked up the Núcleo)
+      if (input.clientTick < d.coreChargeUntil) {
+        const pulse = 0.5 + 0.5 * Math.sin(now / 90);
+        this.ctx.beginPath();
+        this.ctx.arc(s.x, s.y, rad + 6 + pulse * 4, 0, Math.PI * 2);
+        this.ctx.strokeStyle = '#ffdf6b';
+        this.ctx.lineWidth = 3;
+        this.ctx.shadowColor = '#ffdf6b';
+        this.ctx.shadowBlur = 14;
+        this.ctx.stroke();
+        this.ctx.shadowBlur = 0;
+      }
+
       if (d.isSelf) this.selfMarker(s.x, s.y, rad, now);
       // colour-blind aid: a distinct shape badge on every fighter
       drawGlyph(this.ctx, s.x, s.y + rad * 0.16, rad * 0.34, this.idxOf(color), 'rgba(13,11,15,0.85)');
@@ -401,6 +416,34 @@ export class Renderer {
       ctx.stroke();
       ctx.setLineDash([]);
     }
+  }
+
+  // The Núcleo: a pulsing power orb at the centre. Touch it for a Super Empurrão.
+  private drawCore(now: number): void {
+    const ctx = this.ctx;
+    const s = this.toScreen({ x: 0, y: 0 });
+    const R = TUNING.core.radius * this.scale;
+    const pulse = 0.72 + 0.28 * Math.sin(now / 180);
+    const spin = now / 700;
+    ctx.save();
+    ctx.shadowColor = '#ffdf6b';
+    ctx.shadowBlur = 18 + pulse * 22;
+    const g = ctx.createRadialGradient(s.x, s.y, R * 0.1, s.x, s.y, R * pulse);
+    g.addColorStop(0, '#fffbe6');
+    g.addColorStop(0.5, '#ffdf6b');
+    g.addColorStop(1, 'rgba(255,160,40,0.2)');
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, R * pulse, 0, Math.PI * 2);
+    ctx.fillStyle = g;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    // rotating ring of sparks
+    ctx.strokeStyle = 'rgba(255,223,107,0.8)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, R * (1.5 + 0.1 * pulse), spin, spin + Math.PI * 1.4);
+    ctx.stroke();
+    ctx.restore();
   }
 
   private selfSpotlight(x: number, y: number, rad: number, color: string, now: number): void {

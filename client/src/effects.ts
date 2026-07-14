@@ -70,6 +70,11 @@ export class Effects {
       case 'reflect':
         this.rings.push({ pos: { ...e.pos }, t0: now, dur: 220, color: '#4dd8ff', maxR: 48, width: 3 });
         break;
+      case 'core':
+        this.rings.push({ pos: { ...e.pos }, t0: now, dur: 340, color: '#ffdf6b', maxR: 90, width: 5 });
+        this.burst(e.pos, '#ffdf6b', 22, 280);
+        this.burst(e.pos, '#fffbe6', 8, 200);
+        break;
       case 'eliminated':
         this.shake = Math.max(this.shake, 8);
         this.burst(e.pos, colorOf(e.playerId), 24, 320);

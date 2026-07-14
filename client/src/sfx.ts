@@ -98,3 +98,9 @@ export function sfxEliminated(): void {
 export function sfxCountdown(go = false): void {
   tone(go ? 880 : 520, go ? 0.22 : 0.1, 'square', 0.16);
 }
+// A rising chime when the Núcleo is claimed.
+export function sfxCore(): void {
+  tone(660, 0.1, 'triangle', 0.18);
+  tone(990, 0.14, 'triangle', 0.18, undefined, 0.06);
+  tone(1320, 0.2, 'sine', 0.16, undefined, 0.12);
+}

@@ -23,6 +23,8 @@ import {
   GHOST_COOLDOWN_TICKS,
   SHRINK_START_TICKS,
   SHRINK_DURATION_TICKS,
+  CORE_RESPAWN_TICKS,
+  CORE_CHARGE_TICKS,
 } from './tuning';
 import type { Vec2 } from './math';
 import { clamp, lerp, normalize } from './math';
@@ -34,6 +36,7 @@ const D = TUNING.disc;
 const P = TUNING.push;
 const R = TUNING.reflect;
 const G = TUNING.ghost;
+const CORE = TUNING.core;
 
 export type InputMap = Map<string, InputCmd>;
 
@@ -57,6 +60,7 @@ export function step(state: SimState, inputs: InputMap, dt: number): SimEvent[] 
   const events: SimEvent[] = [];
   const tick = state.tick;
   state.arenaRadius = arenaRadiusAt(tick, state.roundStartTick);
+  if (!state.core) state.core = { present: false, respawnAtTick: 0 };
 
   // ---- A. reflect / push timer transitions -------------------------------
   for (const disc of state.discs) {
@@ -148,10 +152,16 @@ export function step(state: SimState, inputs: InputMap, dt: number): SimEvent[] 
     disc.pushCooldownUntil = tick + PUSH_COOLDOWN_TICKS;
     disc.pushAnimUntil = tick + Math.round((P.duration / 1000) * 60);
 
+    // Super Empurrão: consume a Núcleo charge for a stronger, longer push.
+    const charged = tick < disc.coreChargeUntil;
+    const pForce = charged ? P.force * CORE.forceMult : P.force;
+    const pRange = charged ? P.range * CORE.rangeMult : P.range;
+    if (charged) disc.coreChargeUntil = 0;
+
     const recoil: Vec2 = { x: 0, y: 0 };
     for (const target of state.discs) {
       if (target === disc || !target.alive || target.ghost) continue;
-      const r = resolvePushInteraction(disc, target, P.force, P.range, events);
+      const r = resolvePushInteraction(disc, target, pForce, pRange, events);
       recoil.x -= r.x;
       recoil.y -= r.y;
     }
@@ -162,7 +172,7 @@ export function step(state: SimState, inputs: InputMap, dt: number): SimEvent[] 
       playerId: disc.playerId,
       pos: { ...disc.pos },
       dir: smag > 0.01 ? { x: -recoil.x / smag, y: -recoil.y / smag } : undefined,
-      mag: clamp(smag, 0, 1),
+      mag: charged ? 1 : clamp(smag, 0, 1),
     });
     // Recoil: you get shoved away from whoever you shoved. Near your own
     // border, that makes pushing dangerous — symmetric risk, no special rule.
@@ -186,6 +196,28 @@ export function step(state: SimState, inputs: InputMap, dt: number): SimEvent[] 
   for (let i = 0; i < live.length; i++) {
     for (let j = i + 1; j < live.length; j++) {
       collide(live[i], live[j], events);
+    }
+  }
+
+  // ---- E2. Núcleo: spawn once the arena is small, first to touch it charges -
+  {
+    const core = state.core;
+    const small = state.arenaRadius <= CORE.spawnRadius;
+    if (small && !core.present && tick >= core.respawnAtTick && countAlive(state) >= 2) {
+      core.present = true;
+    }
+    if (core.present) {
+      const reach = CORE.radius + D.radius;
+      for (const disc of state.discs) {
+        if (!disc.alive || disc.ghost) continue;
+        if (disc.pos.x * disc.pos.x + disc.pos.y * disc.pos.y <= reach * reach) {
+          disc.coreChargeUntil = tick + CORE_CHARGE_TICKS;
+          core.present = false;
+          core.respawnAtTick = tick + CORE_RESPAWN_TICKS;
+          events.push({ kind: 'core', playerId: disc.playerId, pos: { x: 0, y: 0 } });
+          break; // one disc claims it per tick
+        }
+      }
     }
   }
 

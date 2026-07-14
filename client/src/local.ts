@@ -63,6 +63,9 @@ export class LocalGame {
   get isMatchOver(): boolean {
     return this.phase === 'match_end';
   }
+  get corePresent(): boolean {
+    return this.sim.core?.present ?? false;
+  }
 
   // botCount 1..3 → 2..4 total fighters. fast = best-of-1 quick match.
   start(botCount: number, difficulty: Difficulty, fast = false): void {
@@ -244,6 +247,7 @@ export class LocalGame {
       reflectCooldownUntil: d.reflectCooldownUntil,
       reflectUntil: d.reflectUntil,
       pushAnimUntil: d.pushAnimUntil,
+      coreChargeUntil: d.coreChargeUntil,
       isSelf: d.playerId === YOU,
     }));
   }

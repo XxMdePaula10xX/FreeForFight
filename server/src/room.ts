@@ -279,6 +279,7 @@ export class Room {
       reflectCooldownUntil: d.reflectCooldownUntil,
       reflectUntil: d.reflectUntil,
       pushAnimUntil: d.pushAnimUntil,
+      coreChargeUntil: d.coreChargeUntil,
     }));
     for (const p of this.players.values()) {
       if (!p.connected || !p.socket) continue;
@@ -289,6 +290,7 @@ export class Room {
         phase: this.phase,
         arenaRadius: this.sim.arenaRadius,
         roundStartTick: this.sim.roundStartTick,
+        corePresent: this.sim.core?.present ?? false,
         discs,
       };
       this.sendTo(p, msg);

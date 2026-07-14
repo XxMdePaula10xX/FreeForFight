@@ -48,6 +48,16 @@ export const TUNING = {
     maxDuration: 60000, // ms — nobody scores if this elapses with 2+ alive
     endFreeze: 2000, // ms the round-end screen holds before advancing
   },
+  // "Núcleo": the single power-up the PRD blesses. Appears at the centre once
+  // the arena has shrunk; first to touch it charges a Super Empurrão.
+  core: {
+    spawnRadius: 250, // arena circumradius at/below which the orb can appear
+    radius: 22, // pickup radius of the orb
+    respawn: 7000, // ms before it can reappear after being taken
+    charge: 7000, // ms the Super Empurrão charge lasts once picked up
+    forceMult: 2.0, // super push force multiplier
+    rangeMult: 1.5, // super push range multiplier
+  },
   match: {
     scoreToWin: 3, // first to 3 points takes the match (best of 5)
     maxPlayers: 4,
@@ -66,5 +76,7 @@ export const GHOST_COOLDOWN_TICKS = msToTicks(TUNING.ghost.cooldown);
 export const SHRINK_START_TICKS = msToTicks(TUNING.arena.shrinkStartAt);
 export const SHRINK_DURATION_TICKS = msToTicks(TUNING.arena.shrinkDuration);
 export const MAX_ROUND_TICKS = msToTicks(TUNING.round.maxDuration);
+export const CORE_RESPAWN_TICKS = msToTicks(TUNING.core.respawn);
+export const CORE_CHARGE_TICKS = msToTicks(TUNING.core.charge);
 
 export const PLAYER_COLORS = ['#ffd23f', '#3ddc84', '#ff6bd6', '#7c5cff'] as const;

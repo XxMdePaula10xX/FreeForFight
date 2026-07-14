@@ -18,7 +18,7 @@ import { Renderer } from './render';
 import { initNative, isNative } from './native';
 import { hapticPushLand, hapticReflectHit, hapticEliminated } from './haptics';
 import { settings, setSetting, applyToDocument } from './settings';
-import { unlockAudio, sfxPush, sfxClash, sfxEliminated, sfxCountdown } from './sfx';
+import { unlockAudio, sfxPush, sfxClash, sfxEliminated, sfxCountdown, sfxCore } from './sfx';
 import { TUNING, MAX_ROUND_TICKS } from '../../shared/tuning';
 import type { PlayerInfo, Phase, SimEventKind } from '../../shared/protocol';
 import type { SimEvent } from '../../shared/types';
@@ -33,6 +33,7 @@ function outcomeHaptic(kind: SimEventKind, playerId: string, selfId: string): vo
   if (kind === 'push') hapticPushLand();
   else if (kind === 'clash' || kind === 'reflect') hapticReflectHit();
   else if (kind === 'eliminated') hapticEliminated();
+  else if (kind === 'core') hapticReflectHit();
 }
 
 // In Vite dev the client is on :5173 and the server on :8787 (different origin).
@@ -160,6 +161,7 @@ function makeNet(): NetClient {
         effects.handle(e, (id) => net!.colorOf(id), performance.now());
         outcomeHaptic(e.kind, e.playerId, net!.playerId);
         eventSfx(e, net!.playerId);
+        coreCallout(e, net!.playerId);
       },
       onPhase: () => {},
     },
@@ -308,6 +310,11 @@ function eventSfx(e: SimEvent, selfId: string): void {
   if (e.kind === 'push' && e.playerId === selfId) sfxPush();
   else if (e.kind === 'clash' && (e.mag ?? 0) > 0.25) sfxClash();
   else if (e.kind === 'eliminated') sfxEliminated();
+  else if (e.kind === 'core') sfxCore();
+}
+function coreCallout(e: SimEvent, selfId: string): void {
+  if (e.kind !== 'core') return;
+  showCallout(e.playerId === selfId ? 'NÚCLEO! Seu próximo A é SUPER' : 'Núcleo capturado!');
 }
 function showCallout(text: string): void {
   calloutEl.textContent = text;
@@ -458,6 +465,7 @@ function loop(now: number): void {
           effects.handle(e, (id) => local!.colorOf(id), now);
           outcomeHaptic(e.kind, e.playerId, local!.playerId);
           eventSfx(e, local!.playerId);
+          if (!tutorial) coreCallout(e, local!.playerId);
           if (e.kind === 'eliminated' && !tutorial) slowmoUntil = now + 240;
           frameEvents.push(e);
         }
@@ -538,6 +546,7 @@ function render(now: number): void {
       roundWinnerId: isLocal ? local!.roundWinnerId : roundWinnerId,
       matchWinnerId: isLocal ? local!.matchWinnerId : matchWinnerId,
       scoreToWin: isLocal ? local!.scoreToWin : TUNING.match.scoreToWin,
+      corePresent: isLocal ? local!.corePresent : net!.corePresent,
     },
     effects,
     now,

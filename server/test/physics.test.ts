@@ -160,6 +160,26 @@ function snapshot(s: SimState): string {
   assert(tie.over && tie.winnerId === null, 'timeout with 2+ alive scores nobody');
 }
 
+// ---- 9. Núcleo: spawn when small, pickup arms a super push -----------------
+{
+  const s = fresh(2);
+  s.discs[0].pos = { x: 0, y: 0 }; // 'a' sits on the centre
+  s.discs[1].pos = { x: 40, y: 0 };
+  s.tick = 1400; // arena has shrunk below the core spawn radius by now
+  const evs = step(s, new Map([['a', input()], ['b', input()]]), 1 / 60);
+  assert(s.arenaRadius <= TUNING.core.spawnRadius, 'arena is small enough for the Núcleo');
+  assert(evs.some((e) => e.kind === 'core' && e.playerId === 'a'), 'centre disc claims the Núcleo');
+  assert(s.discs[0].coreChargeUntil > s.tick, 'claiming arms a Super Empurrão');
+
+  // a charged push is flagged super and consumes the charge
+  const evs2 = step(s, new Map([['a', input({ push: true })], ['b', input()]]), 1 / 60);
+  assert(
+    evs2.some((e) => e.kind === 'push' && e.playerId === 'a' && e.mag === 1),
+    'charged push fires as a Super Empurrão',
+  );
+  assert(s.discs[0].coreChargeUntil === 0, 'super push consumes the charge');
+}
+
 // ---- report ----------------------------------------------------------------
 // eslint-disable-next-line no-console
 console.log(`\nphysics: ${passed} passed, ${failed} failed`);

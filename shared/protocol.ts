@@ -33,6 +33,7 @@ export interface DiscSnapshot {
   reflectCooldownUntil: number;
   reflectUntil: number;
   pushAnimUntil: number;
+  coreChargeUntil: number;
 }
 
 // ---- client -> server ------------------------------------------------------
@@ -60,6 +61,7 @@ export type ServerMessage =
       phase: Phase;
       arenaRadius: number;
       roundStartTick: number;
+      corePresent: boolean;
       discs: DiscSnapshot[];
     }
   | { t: 'event'; kind: SimEventKind; playerId: string; pos: Vec2; dir?: Vec2; mag?: number }

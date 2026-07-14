@@ -27,6 +27,14 @@ export interface Disc {
   reflectState: ReflectState;
   reflectUntil: number; // tick the current reflect sub-state ends
   reflectCooldownUntil: number; // tick reflect becomes available again
+  coreChargeUntil: number; // tick until which a Super Empurrão is armed (0 = none)
+}
+
+// The central power-up ("Núcleo"). Deterministic: spawn/pickup driven by the
+// arena radius and tick, never by randomness.
+export interface CoreState {
+  present: boolean;
+  respawnAtTick: number; // earliest tick it may (re)appear
 }
 
 // The full simulation state that step() advances. Deterministic: same input
@@ -36,9 +44,10 @@ export interface SimState {
   roundStartTick: number; // tick at which the `playing` phase began
   arenaRadius: number;
   discs: Disc[];
+  core?: CoreState; // the Núcleo (created lazily by step())
 }
 
-export type SimEventKind = 'push' | 'reflect' | 'clash' | 'eliminated' | 'ghostPush';
+export type SimEventKind = 'push' | 'reflect' | 'clash' | 'eliminated' | 'ghostPush' | 'core';
 
 // Fire-and-forget feedback. Losing one costs a visual, never correctness.
 export interface SimEvent {
@@ -62,5 +71,6 @@ export function makeDisc(playerId: string, pos: Vec2): Disc {
     reflectState: 'idle',
     reflectUntil: 0,
     reflectCooldownUntil: 0,
+    coreChargeUntil: 0,
   };
 }

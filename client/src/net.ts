@@ -45,6 +45,7 @@ export interface RenderDisc {
   reflectCooldownUntil: number;
   reflectUntil: number;
   pushAnimUntil: number;
+  coreChargeUntil: number;
   isSelf: boolean;
 }
 
@@ -78,6 +79,7 @@ export class NetClient {
   clientTick = 0;
   arenaRadius: number = TUNING.arena.startRadius;
   roundStartTick = 0;
+  corePresent = false;
   private smooth = { x: 0, y: 0 };
   private lastSelfRender = { x: 0, y: 0 };
 
@@ -235,6 +237,7 @@ export class NetClient {
 
     this.arenaRadius = msg.arenaRadius;
     this.roundStartTick = msg.roundStartTick;
+    this.corePresent = msg.corePresent;
 
     // Reconcile the local disc.
     const auth = discMap.get(this.playerId);
@@ -285,6 +288,7 @@ export class NetClient {
     d.pushCooldownUntil = a.pushCooldownUntil;
     d.reflectCooldownUntil = a.reflectCooldownUntil;
     d.pushAnimUntil = a.pushAnimUntil;
+    d.coreChargeUntil = a.coreChargeUntil;
   }
 
   // ---- world for rendering -----------------------------------------------
@@ -330,6 +334,7 @@ export class NetClient {
           reflectCooldownUntil: d.reflectCooldownUntil,
           reflectUntil: d.reflectUntil,
           pushAnimUntil: d.pushAnimUntil,
+          coreChargeUntil: d.coreChargeUntil,
           isSelf: true,
         });
         continue;
@@ -353,6 +358,7 @@ export class NetClient {
         reflectCooldownUntil: b.reflectCooldownUntil,
         reflectUntil: b.reflectUntil,
         pushAnimUntil: b.pushAnimUntil,
+        coreChargeUntil: b.coreChargeUntil,
         isSelf: false,
       });
     }

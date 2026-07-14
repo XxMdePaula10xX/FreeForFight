@@ -106,12 +106,13 @@ const TUNING = {
   arena: { startRadius: 340, endRadius: 130, shrinkStartAt: 8000, shrinkDuration: 35000 },
   round: { countdown: 3000, maxDuration: 60000, endFreeze: 2000 },
   match: { scoreToWin: 3 },
+  core: { spawnRadius: 250, radius: 22, respawn: 7000, charge: 7000, forceMult: 2.0, rangeMult: 1.5 },
 };
-const D = TUNING.disc, P = TUNING.push, R = TUNING.reflect, G = TUNING.ghost;
+const D = TUNING.disc, P = TUNING.push, R = TUNING.reflect, G = TUNING.ghost, CORE = TUNING.core;
 const PUSH_CD = msToTicks(P.cooldown), R_ACTIVE = msToTicks(R.active), R_RECOVERY = msToTicks(R.recovery),
   R_CD = msToTicks(R.cooldown), GHOST_CD = msToTicks(G.cooldown), SHRINK_START = msToTicks(TUNING.arena.shrinkStartAt),
   SHRINK_DUR = msToTicks(TUNING.arena.shrinkDuration), MAX_ROUND = msToTicks(TUNING.round.maxDuration),
-  PUSH_ANIM = msToTicks(P.duration);
+  PUSH_ANIM = msToTicks(P.duration), CORE_RESPAWN = msToTicks(CORE.respawn), CORE_CHARGE = msToTicks(CORE.charge);
 const COLORS = ['#ffd23f', '#3ddc84', '#ff6bd6', '#7c5cff'];
 const NAMES = ['Amarelo', 'Verde', 'Rosa', 'Roxo'];
 const KEYMAP = [
@@ -148,7 +149,7 @@ let countdownEndsMs = 0, roundEndAtMs = 0, lastWinner = -1;
 function makeDisc(id, pos) {
   return { id, pos: { x: pos.x, y: pos.y }, vel: { x: 0, y: 0 }, alive: true, ghost: false,
     ghostAngle: Math.atan2(pos.y, pos.x), pushCooldownUntil: 0, pushAnimUntil: 0,
-    reflectState: 'idle', reflectUntil: 0, reflectCooldownUntil: 0 };
+    reflectState: 'idle', reflectUntil: 0, reflectCooldownUntil: 0, coreChargeUntil: 0 };
 }
 function arenaRadiusAt(tick, start) {
   const e = tick - start; if (e <= SHRINK_START) return TUNING.arena.startRadius;
@@ -158,7 +159,7 @@ function arenaRadiusAt(tick, start) {
 function startRound() {
   const n = match.playerCount, spawnR = TUNING.arena.startRadius * 0.55, discs = [];
   for (let i = 0; i < n; i++) { const a = (Math.PI*2*i)/n - Math.PI/2; discs.push(makeDisc(i, { x: Math.cos(a)*spawnR, y: Math.sin(a)*spawnR })); }
-  state = { tick: 0, roundStartTick: 0, arenaRadius: TUNING.arena.startRadius, discs };
+  state = { tick: 0, roundStartTick: 0, arenaRadius: TUNING.arena.startRadius, discs, core: { present: false, respawnAtTick: 0 } };
   inputs = Array.from({ length: n }, () => ({ dir: { x:0,y:0 }, push: false, reflect: false }));
   fx = { rings: [], falls: [], particles: [], embers: [], anim: {}, hitstopUntilMs: 0, flash: 0, shake: 0 };
   phase = 'countdown'; countdownEndsMs = performance.now() + TUNING.round.countdown; showOverlay(false);
@@ -195,9 +196,12 @@ function step() {
     }
     if (!inp.push || tick < disc.pushCooldownUntil || disc.reflectState !== 'idle') continue;
     disc.pushCooldownUntil = tick + PUSH_CD; disc.pushAnimUntil = tick + PUSH_ANIM;
-    events.push({ kind:'push', pos: { ...disc.pos }, id: disc.id });
+    const charged = tick < disc.coreChargeUntil;
+    const pForce = charged ? P.force * CORE.forceMult : P.force, pRange = charged ? P.range * CORE.rangeMult : P.range;
+    if (charged) disc.coreChargeUntil = 0;
+    events.push({ kind:'push', pos: { ...disc.pos }, id: disc.id, super: charged });
     let rx = 0, ry = 0;
-    for (const tgt of state.discs) { if (tgt === disc || !tgt.alive || tgt.ghost) continue; const r = resolvePush(disc, tgt, P.force, P.range, events); rx -= r.x; ry -= r.y; }
+    for (const tgt of state.discs) { if (tgt === disc || !tgt.alive || tgt.ghost) continue; const r = resolvePush(disc, tgt, pForce, pRange, events); rx -= r.x; ry -= r.y; }
     disc.vel.x += rx * P.selfKnockback; disc.vel.y += ry * P.selfKnockback;
   }
   for (const disc of state.discs) {
@@ -207,6 +211,14 @@ function step() {
   }
   const live = state.discs.filter((d) => d.alive && !d.ghost);
   for (let i = 0; i < live.length; i++) for (let j = i+1; j < live.length; j++) collide(live[i], live[j], events);
+  // Núcleo: surge no centro quando a arena está pequena; primeiro a tocar carrega o Super Empurrão
+  { const core = state.core, small = state.arenaRadius <= CORE.spawnRadius;
+    if (small && !core.present && tick >= core.respawnAtTick && live.length >= 2) core.present = true;
+    if (core.present) { const reach = CORE.radius + D.radius;
+      for (const disc of state.discs) { if (!disc.alive || disc.ghost) continue;
+        if (disc.pos.x*disc.pos.x + disc.pos.y*disc.pos.y <= reach*reach) {
+          disc.coreChargeUntil = tick + CORE_CHARGE; core.present = false; core.respawnAtTick = tick + CORE_RESPAWN;
+          events.push({ kind:'core', pos: { x:0, y:0 }, id: disc.id }); break; } } } }
   for (const disc of state.discs) {
     if (!disc.alive || disc.ghost) continue;
     if (outsideDepth(disc.pos, state.arenaRadius) >= 0) {
@@ -263,6 +275,7 @@ function onEvents(events) {
     else if (e.kind === 'clash') { fx.rings.push({ pos: { ...e.pos }, t0: now, dur: 300, color: '#4dd8ff', maxR: 90, w: 6 }); burst(e.pos, '#4dd8ff', 18, 260); burst(e.pos, '#ffffff', 8, 200); fx.hitstopUntilMs = now + 70; fx.flash = 1; fx.shake = Math.max(fx.shake, 9); }
     else if (e.kind === 'reflect') { fx.rings.push({ pos: { ...e.pos }, t0: now, dur: 220, color: '#4dd8ff', maxR: 48, w: 3 }); }
     else if (e.kind === 'eliminated') { burst(e.pos, COLORS[e.id], 22, 300); fx.shake = Math.max(fx.shake, 7); }
+    else if (e.kind === 'core') { fx.rings.push({ pos: { ...e.pos }, t0: now, dur: 340, color: '#ffdf6b', maxR: 90, w: 5 }); burst(e.pos, '#ffdf6b', 22, 280); }
   }
 }
 function updateParticles(dt) {
@@ -362,6 +375,17 @@ function render(now) {
   ctx.shadowColor = '#ff4d2e'; ctx.shadowBlur = 10 + danger*28 + (0.5+0.5*Math.sin(now/130))*danger*14; ctx.stroke(); ctx.shadowBlur = 0;
   octPath(r); ctx.strokeStyle = 'rgba(245,242,232,0.5)'; ctx.lineWidth = 1.5; ctx.stroke();
 
+  // núcleo (power-up central)
+  if (state.core && state.core.present) {
+    const cs = toScreen({ x: 0, y: 0 }), cr = CORE.radius * scale, pulse = 0.72 + 0.28 * Math.sin(now / 180);
+    ctx.save(); ctx.shadowColor = '#ffdf6b'; ctx.shadowBlur = 18 + pulse * 22;
+    const cg = ctx.createRadialGradient(cs.x, cs.y, cr * 0.1, cs.x, cs.y, cr * pulse);
+    cg.addColorStop(0, '#fffbe6'); cg.addColorStop(0.5, '#ffdf6b'); cg.addColorStop(1, 'rgba(255,160,40,0.2)');
+    ctx.beginPath(); ctx.arc(cs.x, cs.y, cr * pulse, 0, Math.PI * 2); ctx.fillStyle = cg; ctx.fill(); ctx.shadowBlur = 0;
+    ctx.strokeStyle = 'rgba(255,223,107,0.8)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(cs.x, cs.y, cr * 1.5, now / 700, now / 700 + Math.PI * 1.4); ctx.stroke(); ctx.restore();
+  }
+
   // falls
   for (let i = fx.falls.length-1; i >= 0; i--) { const f = fx.falls[i]; const t = (now-f.t0)/320; if (t >= 1) { fx.falls.splice(i,1); continue; }
     const px = f.pos.x + f.vel.x*(now-f.t0)/1000, py = f.pos.y + f.vel.y*(now-f.t0)/1000, s = toScreen({ x:px, y:py });
@@ -443,6 +467,9 @@ function drawDiscFighter(disc, now, dt) {
   const moving = clamp(speed/D.maxSpeed, 0, 1);
   if (moving > 0.35 && Math.random() < 0.4) { const nd = normalize(disc.vel);
     fx.particles.push({ x: disc.pos.x - nd.x*20, y: disc.pos.y - nd.y*20, vx: -nd.x*30 + (Math.random()-0.5)*40, vy: -nd.y*30 + (Math.random()-0.5)*40, life: 0, maxLife: 0.4+Math.random()*0.3, size: 2+Math.random()*3, color: shade(color, -0.3), drag: 4 }); }
+  // super empurrão armado (pegou o núcleo)
+  if (state.tick < disc.coreChargeUntil) { const p = 0.5+0.5*Math.sin(now/90);
+    ctx.beginPath(); ctx.arc(s.x, s.y, rad+6+p*4, 0, Math.PI*2); ctx.strokeStyle = '#ffdf6b'; ctx.lineWidth = 3; ctx.shadowColor = '#ffdf6b'; ctx.shadowBlur = 14; ctx.stroke(); ctx.shadowBlur = 0; }
   drawFighter(s.x, s.y, rad, { color, facing: st.facing, moving, walkPhase: st.walkPhase, pushing: st.push, squash: st.push*0.4 });
   // push cooldown arc
   if (state.tick < disc.pushCooldownUntil) { const frac = clamp((disc.pushCooldownUntil - state.tick)/PUSH_CD, 0, 1);
