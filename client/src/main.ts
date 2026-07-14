@@ -14,16 +14,24 @@ import type { Difficulty } from './ai';
 import { InputController } from './input';
 import { Effects } from './effects';
 import { Renderer } from './render';
-import { initNative } from './native';
+import { initNative, isNative } from './native';
 import { TUNING, MAX_ROUND_TICKS } from '../../shared/tuning';
 import type { PlayerInfo, Phase } from '../../shared/protocol';
 
 // In Vite dev the client is on :5173 and the server on :8787 (different origin).
 // When the server serves the built client, WebSocket shares the page's origin.
 const WS_PROTO = location.protocol === 'https:' ? 'wss' : 'ws';
+const ENV_WS_URL = (import.meta as any).env?.VITE_WS_URL as string | undefined;
 const WS_URL =
-  (import.meta as any).env?.VITE_WS_URL ??
+  ENV_WS_URL ??
   (location.port === '5173' ? `ws://${location.hostname}:8787` : `${WS_PROTO}://${location.host}`);
+
+// Online is available on the web (same-origin server) and in a native app ONLY
+// when a server URL was baked in at build time (VITE_WS_URL). A native build
+// without it ships as a clean, offline solo-only app — no dead "Criar sala".
+// `?soloonly` forces the solo-only layout in a browser, to preview that build.
+const FORCE_SOLO = new URLSearchParams(location.search).has('soloonly');
+const ONLINE_ENABLED = !FORCE_SOLO && (!!ENV_WS_URL || !isNative());
 
 // ---- DOM refs --------------------------------------------------------------
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as T;
@@ -338,6 +346,11 @@ function render(now: number): void {
     effects,
     now,
   );
+}
+
+// Solo-only build: hide the online UI entirely so there are no dead buttons.
+if (!ONLINE_ENABLED) {
+  document.getElementById('onlineSection')?.classList.add('hidden');
 }
 
 requestAnimationFrame(loop);
