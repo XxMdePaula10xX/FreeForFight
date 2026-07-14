@@ -47,6 +47,7 @@
         <button id="btnSolo" class="solo-btn">Jogar sozinho</button>
       </div>
 
+      <button id="btnHowto" class="link-btn">Como jogar</button>
       <p id="homeError" class="error hidden"></p>
     </div>
   </section>
@@ -84,6 +85,16 @@
       <div id="reflectBtn" class="btn reflect"><span class="glyph">B</span><span class="cap">refletir</span></div>
       <div id="pushBtn" class="btn push"><span class="glyph">A</span><span class="cap">empurrar</span></div>
     </div>
+  </div>
+
+  <!-- TUTORIAL (coach-marks over the live match) -->
+  <div id="tutorial" class="hidden">
+    <div class="tut-card">
+      <div id="tutDots" class="tut-dots"></div>
+      <p id="tutText" class="tut-text"></p>
+    </div>
+    <button id="tutSkip" class="tut-skip">Pular treino</button>
+    <div id="tutJoyHint" class="tut-joyhint hidden">↖ arraste pra mover</div>
   </div>
 
   <script type="module" src="/src/main.ts"></script>

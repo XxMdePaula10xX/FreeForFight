@@ -41,6 +41,11 @@ export class LocalGame {
   private phaseUntilTick = 0;
   private roundIndex = 0;
 
+  // training (tutorial) mode: a lone dummy, no AI, no shrink, can't lose.
+  training = false;
+  private noShrink = false;
+  private dummyInput: HumanInput = { dir: { x: 0, y: 0 }, push: false, reflect: false };
+
   constructor() {
     this.sim = { tick: 0, roundStartTick: 0, arenaRadius: TUNING.arena.startRadius, discs: [] };
   }
@@ -77,6 +82,49 @@ export class LocalGame {
     this.beginRound();
   }
 
+  // ---- training / tutorial -------------------------------------------------
+  startTraining(): void {
+    this.training = true;
+    this.noShrink = true;
+    this.ids = [YOU, 'dummy'];
+    this.players = [
+      { id: YOU, nickname: 'Você', color: PLAYER_COLORS[0], connected: true, score: 0, isHost: true },
+      { id: 'dummy', nickname: 'Boneco', color: PLAYER_COLORS[1], connected: true, score: 0, isHost: false },
+    ];
+    this.scores = { you: 0, dummy: 0 };
+    this.sim.discs = [makeDisc(YOU, { x: -90, y: 0 }), makeDisc('dummy', { x: 90, y: 0 })];
+    this.sim.roundStartTick = this.sim.tick;
+    this.sim.arenaRadius = TUNING.arena.startRadius;
+    this.phase = 'playing';
+  }
+
+  setDummyInput(inp: HumanInput): void {
+    this.dummyInput = inp;
+  }
+
+  // Reposition both fighters for a fresh drill step.
+  placeTraining(you: { x: number; y: number }, dummy: { x: number; y: number }): void {
+    const y = this.discById(YOU);
+    const d = this.discById('dummy');
+    if (y) {
+      y.pos = { ...you };
+      y.vel = { x: 0, y: 0 };
+      y.reflectState = 'idle';
+      y.pushCooldownUntil = 0;
+      y.reflectCooldownUntil = 0;
+    }
+    if (d) {
+      d.pos = { ...dummy };
+      d.vel = { x: 0, y: 0 };
+      d.reflectState = 'idle';
+      d.pushCooldownUntil = 0;
+    }
+  }
+
+  discById(id: string) {
+    return this.sim.discs.find((x) => x.playerId === id);
+  }
+
   playAgain(): void {
     if (this.phase !== 'match_end') return;
     for (const id of this.ids) this.scores[id] = 0;
@@ -104,7 +152,28 @@ export class LocalGame {
   // Advance one tick at 60Hz. Returns feedback events for the effects layer.
   step(human: HumanInput): SimEvent[] {
     this.sim.tick++;
-    this.sim.arenaRadius = arenaRadiusAt(this.sim.tick, this.sim.roundStartTick);
+    this.sim.arenaRadius = this.noShrink
+      ? TUNING.arena.startRadius
+      : arenaRadiusAt(this.sim.tick, this.sim.roundStartTick);
+
+    if (this.training) {
+      const inputs: InputMap = new Map([
+        [YOU, { seq: 0, dir: human.dir, push: human.push, reflect: human.reflect }],
+        ['dummy', { seq: 0, dir: this.dummyInput.dir, push: this.dummyInput.push, reflect: this.dummyInput.reflect }],
+      ]);
+      const events = step(this.sim, inputs, 1 / 60);
+      // you can't lose the tutorial: revive anyone shoved out
+      for (const d of this.sim.discs) {
+        if (d.ghost) {
+          d.ghost = false;
+          d.alive = true;
+          d.vel = { x: 0, y: 0 };
+          d.reflectState = 'idle';
+          d.pos = d.playerId === YOU ? { x: -90, y: 0 } : { x: 90, y: 0 };
+        }
+      }
+      return events;
+    }
 
     switch (this.phase) {
       case 'countdown':

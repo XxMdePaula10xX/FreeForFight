@@ -237,10 +237,51 @@ button.ghost { border-color: var(--line); font-size: 12px; padding: 9px 16px; wi
 @keyframes btn-ready { 0% { filter: brightness(1); } 45% { filter: brightness(1.7); } 100% { filter: brightness(1); } }
 @keyframes btn-deny { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
 
+/* highlighted control during the tutorial */
+.btn.hl { animation: hl-pulse 1s ease-in-out infinite; }
+@keyframes hl-pulse {
+  0%, 100% { box-shadow: 0 8px 24px -4px rgba(0,0,0,.6), inset 0 2px 0 rgba(255,255,255,.35), 0 0 0 0 rgba(245,242,232,.7); }
+  50% { box-shadow: 0 8px 24px -4px rgba(0,0,0,.6), inset 0 2px 0 rgba(255,255,255,.35), 0 0 0 14px rgba(245,242,232,0); }
+}
+
 /* HUD is hidden on desktop (mouse) — but `body.force-touch` forces it on so the
    controls can be previewed/tested in a normal browser (?touch). */
-@media (pointer: fine) { #hud { display: none; } }
-body.force-touch #hud { display: block !important; }
+@media (pointer: fine) { #hud, #tutorial { display: none; } }
+body.force-touch #hud, body.force-touch #tutorial:not(.hidden) { display: block !important; }
+
+/* ---------- tutorial coach-marks ---------- */
+#tutorial { position: fixed; inset: 0; z-index: 8; pointer-events: none; }
+.tut-card {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  top: calc(env(safe-area-inset-top) + 66px); width: min(88vw, 460px);
+  background: rgba(13, 11, 15, 0.82); border: 1px solid rgba(245, 242, 232, 0.14); border-radius: 14px;
+  padding: 14px 18px; text-align: center; backdrop-filter: blur(8px);
+  box-shadow: 0 16px 40px -12px rgba(0, 0, 0, 0.8); transition: border-color 0.1s, background 0.1s;
+}
+.tut-card.cue { border-color: var(--reflexo); background: rgba(20, 40, 48, 0.9); animation: cue-flash 0.5s ease infinite; }
+@keyframes cue-flash { 0%, 100% { box-shadow: 0 16px 40px -12px rgba(0,0,0,.8), 0 0 0 0 rgba(77,216,255,.5); } 50% { box-shadow: 0 16px 40px -12px rgba(0,0,0,.8), 0 0 0 8px rgba(77,216,255,0); } }
+.tut-text { color: var(--marca); font-family: var(--mono); font-size: 14px; line-height: 1.5; margin: 8px 0 0; }
+.tut-text b { color: var(--reflexo); font-weight: 700; }
+.tut-dots { display: flex; gap: 6px; justify-content: center; }
+.tut-dot { width: 7px; height: 7px; border-radius: 50%; background: rgba(245, 242, 232, 0.22); transition: background 0.2s; }
+.tut-dot.on { background: var(--perigo); }
+.tut-skip {
+  position: absolute; top: calc(env(safe-area-inset-top) + 12px); right: calc(env(safe-area-inset-right) + 14px);
+  pointer-events: auto; width: auto; margin: 0; padding: 8px 14px; font-size: 11px; letter-spacing: 0.08em;
+  border-radius: 999px; border-color: rgba(245, 242, 232, 0.2); background: rgba(13, 11, 15, 0.7);
+}
+.tut-joyhint {
+  position: absolute; left: 14%; bottom: 26%; color: rgba(245, 242, 232, 0.85); font-family: var(--mono);
+  font-size: 13px; pointer-events: none; animation: joyhint 1.4s ease-in-out infinite;
+}
+@keyframes joyhint { 0%, 100% { opacity: 0.5; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-6px); } }
+
+.link-btn {
+  width: auto; margin: 14px auto 0; padding: 6px 10px; border: none; background: none;
+  color: var(--ink-3); font-family: var(--mono); font-size: 12px; letter-spacing: 0.06em;
+  text-transform: none; text-decoration: underline; text-underline-offset: 3px;
+}
+.link-btn:hover { color: var(--marca); background: none; box-shadow: none; }
 
 @media (prefers-reduced-motion: reduce) {
   #bg .glow, #bg .oct, #bg .mote, .panel, .players li { animation: none; }

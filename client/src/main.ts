@@ -10,6 +10,7 @@ import '@fontsource/jetbrains-mono/700.css';
 import './style.css';
 import { NetClient } from './net';
 import { LocalGame } from './local';
+import { Tutorial } from './tutorial';
 import type { Difficulty } from './ai';
 import { InputController } from './input';
 import { Effects } from './effects';
@@ -18,6 +19,7 @@ import { initNative, isNative } from './native';
 import { hapticPushLand, hapticReflectHit, hapticEliminated } from './haptics';
 import { TUNING, MAX_ROUND_TICKS } from '../../shared/tuning';
 import type { PlayerInfo, Phase, SimEventKind } from '../../shared/protocol';
+import type { SimEvent } from '../../shared/types';
 
 const PUSH_CD_TICKS = Math.round((TUNING.push.cooldown / 1000) * 60);
 const REFLECT_CD_TICKS = Math.round((TUNING.reflect.cooldown / 1000) * 60);
@@ -57,6 +59,7 @@ const codeInput = $('#code') as HTMLInputElement;
 const btnCreate = $('#btnCreate');
 const btnJoin = $('#btnJoin');
 const btnSolo = $('#btnSolo');
+const btnHowto = $('#btnHowto');
 const segBots = $('#segBots');
 const segDiff = $('#segDiff');
 const homeError = $('#homeError');
@@ -85,6 +88,7 @@ type Mode = 'online' | 'local' | null;
 let mode: Mode = null;
 let net: NetClient | null = null;
 let local: LocalGame | null = null;
+let tutorial: Tutorial | null = null;
 let scores: Record<string, number> = {}; // online scores (from server messages)
 let countdownEnd = 0; // online countdown (ms)
 let roundWinnerId: string | null = null; // online
@@ -204,14 +208,42 @@ function segChoose(group: HTMLElement, set: (v: string) => void): void {
   );
 }
 
-btnSolo.addEventListener('click', () => {
+function startSolo(): void {
   mode = 'local';
   if (!local) local = new LocalGame();
   endShown = false;
   local.start(selBots, selDiff);
   (window as any).__local = local; // debug hook for smoke tests
   showScreen('match');
+}
+
+function startTutorial(): void {
+  mode = 'local';
+  if (!local) local = new LocalGame();
+  endShown = false;
+  tutorial = new Tutorial(local, () => {
+    tutorial = null;
+    startSolo(); // drop straight into a real match when the drill ends
+  });
+  (window as any).__local = local;
+  (window as any).__tut = tutorial;
+  tutorial.start();
+  showScreen('match');
+}
+
+const tutorialDone = () => {
+  try {
+    return localStorage.getItem('octogono_tutorial_done') === '1';
+  } catch {
+    return false;
+  }
+};
+
+btnSolo.addEventListener('click', () => {
+  if (tutorialDone()) startSolo();
+  else startTutorial(); // teach the controls on the very first play
 });
+btnHowto.addEventListener('click', startTutorial); // replay any time
 
 // ---- lobby -----------------------------------------------------------------
 function renderLobby(code: string, players: PlayerInfo[], _hostId: string): void {
@@ -316,20 +348,24 @@ function loop(now: number): void {
     } else {
       acc += dt;
       let n = 0;
+      const frameEvents: SimEvent[] = [];
       while (acc >= STEP && n < MAX_STEPS) {
         const s = inputCtl.sample();
         const events = local.step({ dir: s.dir, push: s.push, reflect: s.reflect });
         for (const e of events) {
           effects.handle(e, (id) => local!.colorOf(id), now);
           outcomeHaptic(e.kind, e.playerId, local!.playerId);
+          frameEvents.push(e);
         }
         acc -= STEP;
         n++;
         if (local.isMatchOver) break;
       }
       if (acc > STEP * MAX_STEPS) acc = 0;
+      // drive the tutorial step machine (sets the dummy's next input + advances)
+      if (tutorial) tutorial.update(inputCtl.sample(), frameEvents, dt);
     }
-    if (local.isMatchOver && !endShown) showEnd();
+    if (!tutorial && local.isMatchOver && !endShown) showEnd();
   } else {
     acc = 0;
   }
