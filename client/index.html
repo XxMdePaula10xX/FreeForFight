@@ -44,6 +44,10 @@
           <button type="button" data-d="normal" class="on">Médio</button>
           <button type="button" data-d="hard">Difícil</button>
         </div>
+        <div class="seg" id="segFmt" role="group" aria-label="formato">
+          <button type="button" data-f="fast">Rápida</button>
+          <button type="button" data-f="normal" class="on">Melhor de 5</button>
+        </div>
         <button id="btnSolo" class="solo-btn">Jogar sozinho</button>
       </div>
 
@@ -71,8 +75,12 @@
     <div class="panel">
       <h2 id="endTitle">Fim de partida</h2>
       <div id="endScores" class="endscores"></div>
+      <p id="endTally" class="tally hidden"></p>
       <button id="btnAgain" class="primary hidden">Jogar de novo</button>
-      <button id="btnMenu" class="ghost">Menu</button>
+      <div class="end-row">
+        <button id="btnShare" class="ghost">Compartilhar</button>
+        <button id="btnMenu" class="ghost">Menu</button>
+      </div>
     </div>
   </section>
 
@@ -84,6 +92,27 @@
     <div class="buttons">
       <div id="reflectBtn" class="btn reflect"><span class="glyph">B</span><span class="cap">refletir</span></div>
       <div id="pushBtn" class="btn push"><span class="glyph">A</span><span class="cap">empurrar</span></div>
+    </div>
+  </div>
+
+  <!-- just-in-time callout banner -->
+  <div id="callout" class="callout hidden"></div>
+
+  <!-- SETTINGS -->
+  <button id="gear" class="gear" aria-label="Ajustes">⚙</button>
+  <div id="settings" class="modal hidden">
+    <div class="modal-card">
+      <h3>Ajustes</h3>
+      <label class="toggle"><span>Som</span><input type="checkbox" id="setSound" /><i></i></label>
+      <label class="toggle"><span>Vibração</span><input type="checkbox" id="setHaptics" /><i></i></label>
+      <label class="toggle"><span>Menos movimento</span><input type="checkbox" id="setReduce" /><i></i></label>
+      <label class="toggle"><span>Texto grande</span><input type="checkbox" id="setText" /><i></i></label>
+      <p class="set-label">Controles</p>
+      <div class="seg" id="setHand">
+        <button type="button" data-h="L">Canhoto</button>
+        <button type="button" data-h="R" class="on">Destro</button>
+      </div>
+      <button id="setClose" class="primary">Fechar</button>
     </div>
   </div>
 

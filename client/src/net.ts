@@ -174,7 +174,7 @@ export class NetClient {
         this.setPhase(msg.phase); // authoritative phase rides with the snapshot
         break;
       case 'event':
-        this.cb.onEvent?.({ kind: msg.kind, playerId: msg.playerId, pos: msg.pos });
+        this.cb.onEvent?.({ kind: msg.kind, playerId: msg.playerId, pos: msg.pos, dir: msg.dir, mag: msg.mag });
         break;
       case 'round_ended':
         this.setPhase('round_end');

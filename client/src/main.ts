@@ -17,6 +17,8 @@ import { Effects } from './effects';
 import { Renderer } from './render';
 import { initNative, isNative } from './native';
 import { hapticPushLand, hapticReflectHit, hapticEliminated } from './haptics';
+import { settings, setSetting, applyToDocument } from './settings';
+import { unlockAudio, sfxPush, sfxClash, sfxEliminated, sfxCountdown } from './sfx';
 import { TUNING, MAX_ROUND_TICKS } from '../../shared/tuning';
 import type { PlayerInfo, Phase, SimEventKind } from '../../shared/protocol';
 import type { SimEvent } from '../../shared/types';
@@ -62,6 +64,10 @@ const btnSolo = $('#btnSolo');
 const btnHowto = $('#btnHowto');
 const segBots = $('#segBots');
 const segDiff = $('#segDiff');
+const segFmt = $('#segFmt');
+const btnShare = $('#btnShare');
+const endTally = $('#endTally');
+const calloutEl = $('#callout');
 const homeError = $('#homeError');
 
 const lobbyCode = $('#lobbyCode');
@@ -94,6 +100,13 @@ let countdownEnd = 0; // online countdown (ms)
 let roundWinnerId: string | null = null; // online
 let matchWinnerId: string | null = null; // online
 let endShown = false;
+let paused = false; // settings modal open (pauses solo)
+const tally = { you: 0, cpu: 0 }; // in-memory session tally (solo)
+let calloutShrink = false;
+let calloutGhost = false;
+let calloutHideT = 0;
+let slowmoUntil = 0;
+let lastBeepSec = -1;
 
 const effects = new Effects();
 const renderer = new Renderer(canvas);
@@ -130,6 +143,7 @@ function makeNet(): NetClient {
       onCountdown: (_idx, startsInMs) => {
         countdownEnd = performance.now() + startsInMs;
         roundWinnerId = null;
+        resetMatchExtras();
         showScreen('match');
       },
       onMatchStarted: () => showScreen('match'),
@@ -145,6 +159,7 @@ function makeNet(): NetClient {
       onEvent: (e) => {
         effects.handle(e, (id) => net!.colorOf(id), performance.now());
         outcomeHaptic(e.kind, e.playerId, net!.playerId);
+        eventSfx(e, net!.playerId);
       },
       onPhase: () => {},
     },
@@ -195,15 +210,17 @@ function flagNick(): void {
 // ---- solo (LocalGame) ------------------------------------------------------
 let selBots = 2;
 let selDiff: Difficulty = 'normal';
+let selFast = false;
 segChoose(segBots, (b) => (selBots = Number(b)));
 segChoose(segDiff, (d) => (selDiff = d as Difficulty));
+segChoose(segFmt, (f) => (selFast = f === 'fast'));
 
 function segChoose(group: HTMLElement, set: (v: string) => void): void {
   group.querySelectorAll('button').forEach((b) =>
     b.addEventListener('click', () => {
       group.querySelectorAll('button').forEach((x) => x.classList.remove('on'));
       b.classList.add('on');
-      set((b.dataset.b ?? b.dataset.d)!);
+      set((b.dataset.b ?? b.dataset.d ?? b.dataset.f)!);
     }),
   );
 }
@@ -212,7 +229,8 @@ function startSolo(): void {
   mode = 'local';
   if (!local) local = new LocalGame();
   endShown = false;
-  local.start(selBots, selDiff);
+  resetMatchExtras();
+  local.start(selBots, selDiff, selFast);
   (window as any).__local = local; // debug hook for smoke tests
   showScreen('match');
 }
@@ -221,6 +239,7 @@ function startTutorial(): void {
   mode = 'local';
   if (!local) local = new LocalGame();
   endShown = false;
+  resetMatchExtras();
   tutorial = new Tutorial(local, () => {
     tutorial = null;
     startSolo(); // drop straight into a real match when the drill ends
@@ -244,6 +263,79 @@ btnSolo.addEventListener('click', () => {
   else startTutorial(); // teach the controls on the very first play
 });
 btnHowto.addEventListener('click', startTutorial); // replay any time
+
+// ---- settings --------------------------------------------------------------
+applyToDocument();
+const gear = $('#gear');
+const settingsModal = $('#settings');
+const setSound = $('#setSound') as HTMLInputElement;
+const setHaptics = $('#setHaptics') as HTMLInputElement;
+const setReduce = $('#setReduce') as HTMLInputElement;
+const setText = $('#setText') as HTMLInputElement;
+const segHand = $('#setHand');
+
+function syncSettingsUI(): void {
+  setSound.checked = settings.sound;
+  setHaptics.checked = settings.haptics;
+  setReduce.checked = settings.reducedMotion;
+  setText.checked = settings.largeText;
+  segHand.querySelectorAll('button').forEach((b) => b.classList.toggle('on', (b as HTMLElement).dataset.h === settings.hand));
+}
+gear.addEventListener('click', () => {
+  syncSettingsUI();
+  settingsModal.classList.remove('hidden');
+  paused = true;
+});
+$('#setClose').addEventListener('click', () => {
+  settingsModal.classList.add('hidden');
+  paused = false;
+});
+setSound.addEventListener('change', () => setSetting('sound', setSound.checked));
+setHaptics.addEventListener('change', () => setSetting('haptics', setHaptics.checked));
+setReduce.addEventListener('change', () => setSetting('reducedMotion', setReduce.checked));
+setText.addEventListener('change', () => setSetting('largeText', setText.checked));
+segHand.querySelectorAll('button').forEach((b) =>
+  b.addEventListener('click', () => {
+    segHand.querySelectorAll('button').forEach((x) => x.classList.remove('on'));
+    b.classList.add('on');
+    setSetting('hand', (b as HTMLElement).dataset.h as 'R' | 'L');
+  }),
+);
+window.addEventListener('pointerdown', () => unlockAudio(), { once: true });
+
+// ---- SFX + callouts --------------------------------------------------------
+function eventSfx(e: SimEvent, selfId: string): void {
+  if (e.kind === 'push' && e.playerId === selfId) sfxPush();
+  else if (e.kind === 'clash' && (e.mag ?? 0) > 0.25) sfxClash();
+  else if (e.kind === 'eliminated') sfxEliminated();
+}
+function showCallout(text: string): void {
+  calloutEl.textContent = text;
+  calloutEl.classList.remove('hidden');
+  calloutHideT = performance.now() + 2200;
+}
+function resetMatchExtras(): void {
+  calloutShrink = false;
+  calloutGhost = false;
+  slowmoUntil = 0;
+  lastBeepSec = -1;
+}
+btnShare.addEventListener('click', async () => {
+  const isLocal = mode === 'local';
+  const w = isLocal ? local!.matchWinnerId : matchWinnerId;
+  const src = isLocal ? local! : net!;
+  const txt = w ? `${src.nicknameOf(w)} venceu no Octógono — sumô eletrônico! 🥋` : 'Empate no Octógono! 🥋';
+  try {
+    if ((navigator as any).share) await (navigator as any).share({ text: txt });
+    else {
+      await navigator.clipboard.writeText(txt);
+      btnShare.textContent = 'Copiado!';
+      setTimeout(() => (btnShare.textContent = 'Compartilhar'), 1500);
+    }
+  } catch {
+    /* user cancelled share — ignore */
+  }
+});
 
 // ---- lobby -----------------------------------------------------------------
 function renderLobby(code: string, players: PlayerInfo[], _hostId: string): void {
@@ -295,6 +387,15 @@ function showEnd(): void {
         `<div><span class="dot" style="background:${p.color};color:${p.color}"></span> ${escapeHtml(p.nickname)} — <b>${sc[p.id] ?? 0}</b></div>`,
     )
     .join('');
+  // session tally (solo): Você vs CPU across the session
+  if (isLocal) {
+    if (w === local!.playerId) tally.you++;
+    else if (w) tally.cpu++;
+    endTally.textContent = `Sessão — Você ${tally.you} · CPU ${tally.cpu}`;
+    endTally.classList.remove('hidden');
+  } else {
+    endTally.classList.add('hidden');
+  }
   const canAgain = isLocal ? true : net!.isHost;
   btnAgain.classList.toggle('hidden', !canAgain);
   showScreen('end');
@@ -343,10 +444,11 @@ function loop(now: number): void {
     }
     if (acc > STEP * MAX_STEPS) acc = 0;
   } else if (mode === 'local' && local && local.phase !== 'match_end') {
-    if (effects.isFrozen(now)) {
-      acc = 0; // hitstop: freeze the local sim briefly so a parry lands hard
+    if (paused || effects.isFrozen(now)) {
+      acc = 0; // paused (settings open) or hitstop: freeze the local sim
     } else {
-      acc += dt;
+      // brief slow-mo makes a ring-out land harder
+      acc += now < slowmoUntil ? dt * 0.45 : dt;
       let n = 0;
       const frameEvents: SimEvent[] = [];
       while (acc >= STEP && n < MAX_STEPS) {
@@ -355,6 +457,8 @@ function loop(now: number): void {
         for (const e of events) {
           effects.handle(e, (id) => local!.colorOf(id), now);
           outcomeHaptic(e.kind, e.playerId, local!.playerId);
+          eventSfx(e, local!.playerId);
+          if (e.kind === 'eliminated' && !tutorial) slowmoUntil = now + 240;
           frameEvents.push(e);
         }
         acc -= STEP;
@@ -391,6 +495,35 @@ function render(now: number): void {
   const countdownLeft = isLocal
     ? Math.max(0, (src.roundStartTick - src.clientTick) / 60)
     : Math.max(0, (countdownEnd - now) / 1000);
+
+  // countdown beeps (3-2-1-VAI!)
+  if (src.phase === 'countdown') {
+    const sec = Math.ceil(countdownLeft);
+    if (sec !== lastBeepSec) {
+      if (sec >= 1 && sec <= 3) sfxCountdown(false);
+      lastBeepSec = sec;
+    }
+  } else if (src.phase === 'playing' && lastBeepSec !== 0) {
+    sfxCountdown(true); // "VAI!"
+    lastBeepSec = 0;
+  }
+
+  // just-in-time callouts (first shrink, first ghost of the match)
+  if (src.phase === 'playing' && !tutorial) {
+    if (!calloutShrink && src.arenaRadius < TUNING.arena.startRadius - 3) {
+      calloutShrink = true;
+      showCallout('A arena está encolhendo!');
+    }
+    if (!calloutGhost && discs.some((d) => d.ghost)) {
+      calloutGhost = true;
+      showCallout('Fantasma! Ataque da borda');
+    }
+  }
+  if (calloutHideT && now > calloutHideT) {
+    calloutEl.classList.add('hidden');
+    calloutHideT = 0;
+  }
+
   renderer.draw(
     {
       discs,
@@ -404,6 +537,7 @@ function render(now: number): void {
       roundTimeLeft,
       roundWinnerId: isLocal ? local!.roundWinnerId : roundWinnerId,
       matchWinnerId: isLocal ? local!.matchWinnerId : matchWinnerId,
+      scoreToWin: isLocal ? local!.scoreToWin : TUNING.match.scoreToWin,
     },
     effects,
     now,

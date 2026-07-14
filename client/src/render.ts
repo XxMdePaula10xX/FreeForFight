@@ -8,6 +8,7 @@ import { vertices } from '../../shared/octagon';
 import type { RenderDisc } from './net';
 import type { Effects } from './effects';
 import { drawFighter, drawGhostFighter, shade } from './sprites';
+import { settings } from './settings';
 import type { PlayerInfo, Phase } from '../../shared/protocol';
 
 const C = {
@@ -21,6 +22,33 @@ const C = {
 const PUSH_CD_TICKS = Math.round((TUNING.push.cooldown / 1000) * 60);
 const REFLECT_CD_TICKS = Math.round((TUNING.reflect.cooldown / 1000) * 60);
 const PUSH_ANIM_TICKS = Math.round((TUNING.push.duration / 1000) * 60);
+const REFLECT_ACTIVE_TICKS = Math.round((TUNING.reflect.active / 1000) * 60);
+
+// A distinct shape per player index — identity that survives colour blindness.
+function drawGlyph(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, idx: number, color: string): void {
+  ctx.save();
+  ctx.beginPath();
+  const k = ((idx % 4) + 4) % 4;
+  if (k === 0) {
+    ctx.arc(x, y, r * 0.7, 0, Math.PI * 2);
+  } else if (k === 1) {
+    ctx.moveTo(x, y - r);
+    ctx.lineTo(x + r, y + r * 0.8);
+    ctx.lineTo(x - r, y + r * 0.8);
+    ctx.closePath();
+  } else if (k === 2) {
+    ctx.rect(x - r * 0.75, y - r * 0.75, r * 1.5, r * 1.5);
+  } else {
+    ctx.moveTo(x, y - r);
+    ctx.lineTo(x + r, y);
+    ctx.lineTo(x, y + r);
+    ctx.lineTo(x - r, y);
+    ctx.closePath();
+  }
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.restore();
+}
 
 export interface RenderInput {
   discs: RenderDisc[];
@@ -34,6 +62,7 @@ export interface RenderInput {
   roundTimeLeft: number;
   roundWinnerId: string | null;
   matchWinnerId: string | null;
+  scoreToWin: number;
 }
 
 interface AnimState {
@@ -291,7 +320,7 @@ export class Renderer {
       if (d.isSelf) this.selfSpotlight(s.x, s.y, rad, color, now);
 
       // reflect states drawn under the fighter for a clear read
-      this.reflectAura(d, s.x, s.y, rad, now);
+      this.reflectAura(d, s.x, s.y, rad, input.clientTick);
 
       const speed = Math.hypot(d.vel.x, d.vel.y);
       const moving = clamp(speed / TUNING.disc.maxSpeed, 0, 1);
@@ -307,8 +336,15 @@ export class Renderer {
       });
 
       if (d.isSelf) this.selfMarker(s.x, s.y, rad, now);
+      // colour-blind aid: a distinct shape badge on every fighter
+      drawGlyph(this.ctx, s.x, s.y + rad * 0.16, rad * 0.34, this.idxOf(color), 'rgba(13,11,15,0.85)');
       this.cooldownArcs(d, input, s.x, s.y, rad);
     }
+  }
+
+  private idxOf(color: string): number {
+    const i = (PLAYER_COLORS as readonly string[]).indexOf(color);
+    return i < 0 ? 0 : i;
   }
 
   private animFor(d: RenderDisc, input: RenderInput, dt: number): AnimState {
@@ -329,22 +365,33 @@ export class Renderer {
     return st;
   }
 
-  private reflectAura(d: RenderDisc, x: number, y: number, rad: number, now: number): void {
+  private reflectAura(d: RenderDisc, x: number, y: number, rad: number, clientTick: number): void {
     const ctx = this.ctx;
     if (d.reflectState === 'active') {
-      const pulse = 0.5 + 0.5 * Math.sin(now / 60);
+      // A crisp SNAP that eases out over exactly the 180ms window — reads as a
+      // timed event, not a slow pulse. `snap` is 1 at the instant you parry.
+      const snap = clamp((d.reflectUntil - clientTick) / REFLECT_ACTIVE_TICKS, 0, 1);
+      // shield ring
       ctx.beginPath();
-      ctx.arc(x, y, rad + 9 + pulse * 3, 0, Math.PI * 2);
+      ctx.arc(x, y, rad + 7, 0, Math.PI * 2);
       ctx.strokeStyle = C.reflexo;
-      ctx.lineWidth = 4;
+      ctx.lineWidth = 3 + snap * 3;
       ctx.shadowColor = C.reflexo;
-      ctx.shadowBlur = 20;
+      ctx.shadowBlur = 8 + snap * 22;
       ctx.stroke();
       ctx.shadowBlur = 0;
+      // fill
       ctx.beginPath();
-      ctx.arc(x, y, rad + 9 + pulse * 3, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(77,216,255,${0.08 + pulse * 0.06})`;
+      ctx.arc(x, y, rad + 7, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(77,216,255,${0.06 + snap * 0.12})`;
       ctx.fill();
+      // collapsing timing ring — visualises the window closing
+      const tr = rad + 4 + snap * rad * 1.9;
+      ctx.beginPath();
+      ctx.arc(x, y, tr, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(125,230,255,${0.25 + snap * 0.55})`;
+      ctx.lineWidth = 2;
+      ctx.stroke();
     } else if (d.reflectState === 'recovery') {
       ctx.beginPath();
       ctx.arc(x, y, rad + 6, 0, Math.PI * 2);
@@ -448,28 +495,26 @@ export class Renderer {
     const total = (n - 1) * gap;
     let x = this.W / 2 - total / 2;
     const top = this.safeTop;
-    ctx.font = "700 14px 'Archivo Variable', 'Archivo Black', system-ui, sans-serif";
+    const lt = settings.largeText ? 1.22 : 1;
+    const nameFont = `700 ${Math.round(14 * lt)}px 'Archivo Variable', 'Archivo Black', system-ui, sans-serif`;
     for (const p of players) {
       const disc = input.discs.find((d) => d.playerId === p.id);
       const alive = disc ? disc.alive && !disc.ghost : false;
       ctx.globalAlpha = alive || input.phase !== 'playing' ? 1 : 0.4;
-      // colour token
-      ctx.beginPath();
-      ctx.arc(x - 52, top + 26, 7, 0, Math.PI * 2);
-      ctx.fillStyle = p.color;
+      // shaped + coloured token (shape = colour-blind safe identity)
       ctx.shadowColor = p.color;
       ctx.shadowBlur = alive && input.phase === 'playing' ? 10 : 0;
-      ctx.fill();
+      drawGlyph(ctx, x - 52, top + 26, 8, this.idxOf(p.color), p.color);
       ctx.shadowBlur = 0;
+      ctx.font = nameFont;
       ctx.fillStyle = p.id === input.selfId ? C.marca : '#c7c2d2';
       ctx.textAlign = 'left';
       const score = input.scores[p.id] ?? p.score ?? 0;
       ctx.fillText(p.nickname, x - 40, top + 20);
       // score pips
-      ctx.font = "800 13px 'JetBrains Mono', monospace";
+      ctx.font = `800 ${Math.round(13 * lt)}px 'JetBrains Mono', monospace`;
       ctx.fillStyle = p.color;
-      ctx.fillText('◆'.repeat(score) + '◇'.repeat(Math.max(0, TUNING.match.scoreToWin - score)), x - 40, top + 34);
-      ctx.font = "700 14px 'Archivo Variable', 'Archivo Black', system-ui, sans-serif";
+      ctx.fillText('◆'.repeat(score) + '◇'.repeat(Math.max(0, input.scoreToWin - score)), x - 40, top + 34);
       ctx.globalAlpha = 1;
       x += gap;
     }

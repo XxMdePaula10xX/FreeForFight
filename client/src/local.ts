@@ -32,6 +32,7 @@ export class LocalGame {
   scores: Record<string, number> = {};
   roundWinnerId: string | null = null;
   matchWinnerId: string | null = null;
+  scoreToWin: number = TUNING.match.scoreToWin;
   readonly playerId = YOU;
   readonly isHost = true;
 
@@ -63,9 +64,12 @@ export class LocalGame {
     return this.phase === 'match_end';
   }
 
-  // botCount 1..3 → 2..4 total fighters.
-  start(botCount: number, difficulty: Difficulty): void {
+  // botCount 1..3 → 2..4 total fighters. fast = best-of-1 quick match.
+  start(botCount: number, difficulty: Difficulty, fast = false): void {
     this.difficulty = difficulty;
+    this.training = false;
+    this.noShrink = false;
+    this.scoreToWin = fast ? 1 : TUNING.match.scoreToWin;
     const n = Math.min(4, Math.max(2, botCount + 1));
     this.ids = [YOU, ...BOT_NAMES.slice(0, n - 1).map((_, i) => `b${i + 1}`)];
     this.players = this.ids.map((id, i) => ({
@@ -219,7 +223,7 @@ export class LocalGame {
       const p = this.players.find((pl) => pl.id === winnerId);
       if (p) p.score = this.scores[winnerId];
     }
-    if (winnerId && this.scores[winnerId] >= TUNING.match.scoreToWin) {
+    if (winnerId && this.scores[winnerId] >= this.scoreToWin) {
       this.matchWinnerId = winnerId;
       this.phase = 'match_end';
     } else {

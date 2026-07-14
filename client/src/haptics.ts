@@ -4,11 +4,7 @@
 // from real sim events so it never triggers on a whiffed tap.
 
 import { isNative } from './native';
-
-let enabled = true;
-export function setHapticsEnabled(v: boolean): void {
-  enabled = v;
-}
+import { settings } from './settings';
 
 // Cache the dynamically-imported plugin so we don't re-import every buzz.
 let plugin: typeof import('@capacitor/haptics') | null = null;
@@ -28,7 +24,7 @@ function webVibrate(pattern: number | number[]): void {
 }
 
 function fire(webPattern: number | number[], run: (h: typeof import('@capacitor/haptics')) => void): void {
-  if (!enabled) return;
+  if (!settings.haptics) return;
   if (isNative()) {
     native().then(run).catch(() => webVibrate(webPattern));
   } else {

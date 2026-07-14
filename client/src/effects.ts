@@ -7,8 +7,9 @@
 
 import type { SimEventLike } from '../../shared/protocol';
 import { TUNING } from '../../shared/tuning';
+import { settings } from './settings';
 
-const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+const reduced = () => settings.reducedMotion;
 
 interface Ring {
   pos: { x: number; y: number };
@@ -47,38 +48,43 @@ export class Effects {
   private hitstopUntil = 0;
 
   handle(e: SimEventLike, colorOf: (id: string) => string, now: number): void {
+    const mag = e.mag ?? 0.4;
     switch (e.kind) {
       case 'push':
         this.rings.push({ pos: { ...e.pos }, t0: now, dur: 240, color: '#f5f2e8', maxR: TUNING.push.range, width: 4 });
-        this.burst(e.pos, '#f5f2e8', 8, 120);
+        // shove cone biased along the push direction, brighter with force
+        this.burst(e.pos, '#f5f2e8', 8 + Math.round(mag * 8), 140 + mag * 160, e.dir);
+        this.shake = Math.max(this.shake, 2 + mag * 4);
         break;
       case 'ghostPush':
         this.rings.push({ pos: { ...e.pos }, t0: now, dur: 220, color: '#c7c2d2', maxR: TUNING.ghost.range, width: 3 });
         break;
       case 'clash':
         this.rings.push({ pos: { ...e.pos }, t0: now, dur: 300, color: '#4dd8ff', maxR: 90, width: 6 });
-        this.burst(e.pos, '#4dd8ff', 18, 260);
-        this.burst(e.pos, '#ffffff', 8, 200);
+        this.burst(e.pos, '#4dd8ff', 18, 260, e.dir);
+        this.burst(e.pos, '#ffffff', 8, 200, e.dir);
         this.flash = 1;
-        this.shake = Math.max(this.shake, 9);
-        if (!reduced) this.hitstopUntil = now + 70;
+        this.shake = Math.max(this.shake, 6 + mag * 6);
+        if (!reduced()) this.hitstopUntil = now + 70;
         break;
       case 'reflect':
         this.rings.push({ pos: { ...e.pos }, t0: now, dur: 220, color: '#4dd8ff', maxR: 48, width: 3 });
         break;
       case 'eliminated':
-        this.shake = Math.max(this.shake, 7);
-        this.burst(e.pos, colorOf(e.playerId), 22, 300);
-        if (!reduced) this.falls.push({ pos: { ...e.pos }, vel: { x: 0, y: 0 }, t0: now, color: colorOf(e.playerId) });
+        this.shake = Math.max(this.shake, 8);
+        this.burst(e.pos, colorOf(e.playerId), 24, 320);
+        if (!reduced()) this.falls.push({ pos: { ...e.pos }, vel: { x: 0, y: 0 }, t0: now, color: colorOf(e.playerId) });
         break;
     }
   }
 
-  // A radial spray of sparks in world space.
-  burst(pos: { x: number; y: number }, color: string, n: number, speed: number): void {
-    if (reduced) return;
+  // A spray of sparks in world space. With `dir`, biases into a forward cone.
+  burst(pos: { x: number; y: number }, color: string, n: number, speed: number, dir?: { x: number; y: number }): void {
+    if (reduced()) return;
+    const base = dir ? Math.atan2(dir.y, dir.x) : 0;
+    const hasDir = !!dir && (dir.x !== 0 || dir.y !== 0);
     for (let i = 0; i < n; i++) {
-      const a = Math.random() * Math.PI * 2;
+      const a = hasDir ? base + (Math.random() - 0.5) * 1.1 : Math.random() * Math.PI * 2;
       const sp = speed * (0.4 + Math.random() * 0.6);
       this.particles.push({
         x: pos.x,
@@ -96,7 +102,7 @@ export class Effects {
 
   // Dust kicked up behind a moving fighter (world space).
   dust(pos: { x: number; y: number }, dir: { x: number; y: number }, color: string): void {
-    if (reduced || Math.random() > 0.4) return;
+    if (reduced() || Math.random() > 0.4) return;
     this.particles.push({
       x: pos.x - dir.x * 20,
       y: pos.y - dir.y * 20,
@@ -112,7 +118,7 @@ export class Effects {
 
   // Ambient embers that rise near the shrinking danger border.
   spawnEmber(pos: { x: number; y: number }): void {
-    if (reduced) return;
+    if (reduced()) return;
     this.embers.push({
       x: pos.x,
       y: pos.y,

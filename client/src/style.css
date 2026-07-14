@@ -187,6 +187,18 @@ button.ghost { border-color: var(--line); font-size: 12px; padding: 9px 16px; wi
 .pname { flex: 1; text-align: left; }
 .host { font-size: 10px; color: var(--perigo); letter-spacing: 0.14em; font-family: var(--mono); font-weight: 700; }
 .off { font-size: 10px; color: var(--ink-3); font-family: var(--mono); }
+.tally { color: var(--ink-2); font-family: var(--mono); font-size: 13px; margin: -4px 0 8px; }
+.end-row { display: flex; gap: 8px; margin-top: 8px; }
+.end-row .ghost { flex: 1; width: auto; }
+.callout {
+  position: fixed; top: 28%; left: 50%; transform: translateX(-50%); z-index: 9; pointer-events: none;
+  background: rgba(13, 11, 15, 0.85); border: 1px solid var(--perigo); border-radius: 999px;
+  padding: 10px 20px; font-family: var(--display); font-size: 15px; text-transform: uppercase;
+  letter-spacing: 0.02em; color: var(--marca); white-space: nowrap; box-shadow: 0 0 30px -6px var(--perigo);
+  animation: callout-in 0.3s ease both;
+}
+.callout.hidden { display: none; }
+@keyframes callout-in { from { opacity: 0; transform: translateX(-50%) translateY(-10px) scale(0.9); } to { opacity: 1; transform: translateX(-50%); } }
 .endscores { margin: 20px 0; display: flex; flex-direction: column; gap: 10px; font-size: 16px; font-family: var(--sans); font-weight: 600; }
 .endscores > div { display: flex; align-items: center; justify-content: center; gap: 8px; }
 .endscores .dot { width: 13px; height: 13px; }
@@ -282,6 +294,59 @@ body.force-touch #hud, body.force-touch #tutorial:not(.hidden) { display: block 
   text-transform: none; text-decoration: underline; text-underline-offset: 3px;
 }
 .link-btn:hover { color: var(--marca); background: none; box-shadow: none; }
+
+/* ---------- settings ---------- */
+.gear {
+  position: fixed; z-index: 12; top: calc(env(safe-area-inset-top) + 52px);
+  left: calc(env(safe-area-inset-left) + 12px); width: 42px; height: 42px; margin: 0; padding: 0;
+  border-radius: 50%; font-size: 20px; line-height: 1; border: 1px solid rgba(245, 242, 232, 0.16);
+  background: rgba(13, 11, 15, 0.7); color: var(--marca); backdrop-filter: blur(6px);
+}
+.gear:hover { background: rgba(245, 242, 232, 0.12); }
+.modal {
+  position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center;
+  padding: 20px; background: rgba(6, 5, 9, 0.72); backdrop-filter: blur(3px);
+}
+.modal.hidden { display: none; }
+.modal-card {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 26px 26px 22px;
+  width: 100%; max-width: 380px; backdrop-filter: blur(16px);
+  box-shadow: 0 30px 80px -20px rgba(0, 0, 0, 0.8);
+}
+.modal-card h3 { font-family: var(--display); font-size: 22px; text-transform: uppercase; letter-spacing: -0.01em;
+  text-align: center; margin-bottom: 18px; }
+.set-label { color: var(--ink-3); font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase;
+  font-family: var(--mono); margin: 16px 0 8px; }
+.toggle { display: flex; align-items: center; justify-content: space-between; padding: 11px 2px;
+  font-family: var(--sans); font-weight: 600; font-size: 15px; cursor: pointer;
+  border-bottom: 1px solid rgba(245, 242, 232, 0.07); }
+.toggle input { display: none; }
+.toggle i { position: relative; width: 46px; height: 26px; border-radius: 999px; flex: none;
+  background: rgba(245, 242, 232, 0.14); transition: background 0.15s; }
+.toggle i::after { content: ''; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px;
+  border-radius: 50%; background: var(--marca); transition: transform 0.15s; }
+.toggle input:checked + i { background: var(--perigo); }
+.toggle input:checked + i::after { transform: translateX(20px); }
+.modal-card .seg button { flex: 1; margin: 0; padding: 11px 8px; font-size: 13px; font-weight: 800;
+  background: rgba(9, 8, 12, 0.5); border: 1.5px solid var(--line); border-radius: 10px; }
+.modal-card .seg button.on { border-color: var(--reflexo); background: rgba(77, 216, 255, 0.12); color: var(--marca); }
+.modal-card .primary { margin-top: 20px; }
+
+/* left-handed: mirror joystick zone to the right and A/B buttons to the left */
+body[data-hand='L'] .joyzone { left: auto; right: 0; }
+body[data-hand='L'] .buttons { right: auto; left: calc(26px + env(safe-area-inset-left)); }
+
+/* larger text (canvas HUD is scaled in render.ts) */
+body.large-text .tag, body.large-text .explain { font-size: 15px; }
+body.large-text .tut-text { font-size: 16px; }
+body.large-text .btn .cap { font-size: 12px; }
+body.large-text .players li, body.large-text .toggle { font-size: 17px; }
+
+/* manual reduced-motion (mirrors the media query for the in-app toggle) */
+body.reduce-motion #bg .glow, body.reduce-motion #bg .oct, body.reduce-motion #bg .mote,
+body.reduce-motion .panel, body.reduce-motion .players li, body.reduce-motion .btn.ready,
+body.reduce-motion .btn.denied, body.reduce-motion .btn.hl, body.reduce-motion .tut-card.cue,
+body.reduce-motion .tut-joyhint { animation: none; }
 
 @media (prefers-reduced-motion: reduce) {
   #bg .glow, #bg .oct, #bg .mote, .panel, .players li { animation: none; }

@@ -211,7 +211,7 @@ export class Room {
         }
         const events = step(this.sim, inputs, 1 / 60);
         for (const e of events) {
-          this.pendingEvents.push({ t: 'event', kind: e.kind, playerId: e.playerId, pos: e.pos });
+          this.pendingEvents.push({ t: 'event', kind: e.kind, playerId: e.playerId, pos: e.pos, dir: e.dir, mag: e.mag });
         }
         const timedOut = this.tick - this.sim.roundStartTick >= MAX_ROUND_TICKS;
         const outcome = evaluateRound(this.sim, timedOut);

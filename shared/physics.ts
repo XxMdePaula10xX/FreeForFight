@@ -147,15 +147,23 @@ export function step(state: SimState, inputs: InputMap, dt: number): SimEvent[] 
 
     disc.pushCooldownUntil = tick + PUSH_COOLDOWN_TICKS;
     disc.pushAnimUntil = tick + Math.round((P.duration / 1000) * 60);
-    events.push({ kind: 'push', playerId: disc.playerId, pos: { ...disc.pos } });
 
-    let recoil: Vec2 = { x: 0, y: 0 };
+    const recoil: Vec2 = { x: 0, y: 0 };
     for (const target of state.discs) {
       if (target === disc || !target.alive || target.ghost) continue;
       const r = resolvePushInteraction(disc, target, P.force, P.range, events);
       recoil.x -= r.x;
       recoil.y -= r.y;
     }
+    // The shove went opposite your recoil; hand its direction to the effects.
+    const smag = Math.hypot(recoil.x, recoil.y);
+    events.push({
+      kind: 'push',
+      playerId: disc.playerId,
+      pos: { ...disc.pos },
+      dir: smag > 0.01 ? { x: -recoil.x / smag, y: -recoil.y / smag } : undefined,
+      mag: clamp(smag, 0, 1),
+    });
     // Recoil: you get shoved away from whoever you shoved. Near your own
     // border, that makes pushing dangerous — symmetric risk, no special rule.
     disc.vel.x += recoil.x * P.selfKnockback;
@@ -226,7 +234,8 @@ function resolvePushInteraction(
     const mag = baseForce * falloff * R.returnMult;
     attacker.vel.x -= nx * mag;
     attacker.vel.y -= ny * mag;
-    events.push({ kind: 'clash', playerId: target.playerId, pos: { ...target.pos } });
+    // parry: the attacker is flung away from the reflector (-n direction)
+    events.push({ kind: 'clash', playerId: target.playerId, pos: { ...target.pos }, dir: { x: -nx, y: -ny }, mag: falloff });
     return { x: 0, y: 0 }; // no recoil from a target that vanished the hit
   }
 
@@ -296,6 +305,8 @@ function collide(a: Disc, b: Disc, events: SimEvent[]): void {
       kind: 'clash',
       playerId: a.playerId,
       pos: { x: a.pos.x + nx * D.radius, y: a.pos.y + ny * D.radius },
+      dir: { x: nx, y: ny },
+      mag: clamp(j / 700, 0, 1),
     });
   }
 }

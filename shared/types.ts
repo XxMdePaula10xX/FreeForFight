@@ -45,6 +45,8 @@ export interface SimEvent {
   kind: SimEventKind;
   playerId: string;
   pos: Vec2;
+  dir?: Vec2; // direction of the shove/knockback, for directional juice
+  mag?: number; // 0..1 strength, for magnitude-scaled shake/particles
 }
 
 export function makeDisc(playerId: string, pos: Vec2): Disc {

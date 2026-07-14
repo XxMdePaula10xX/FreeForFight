@@ -62,7 +62,7 @@ export type ServerMessage =
       roundStartTick: number;
       discs: DiscSnapshot[];
     }
-  | { t: 'event'; kind: SimEventKind; playerId: string; pos: Vec2 }
+  | { t: 'event'; kind: SimEventKind; playerId: string; pos: Vec2; dir?: Vec2; mag?: number }
   | { t: 'round_ended'; winnerId: string | null; scores: Record<string, number> }
   | { t: 'match_ended'; winnerId: string | null; scores: Record<string, number> };
 
@@ -71,6 +71,8 @@ export interface SimEventLike {
   kind: SimEventKind;
   playerId: string;
   pos: Vec2;
+  dir?: Vec2;
+  mag?: number;
 }
 
 export const encode = (m: ClientMessage | ServerMessage): string => JSON.stringify(m);
