@@ -83,6 +83,8 @@ export class Renderer {
   cy = 0;
   safeTop = 0; // iOS status-bar / notch inset so the scoreboard clears it
   private vignette: CanvasGradient | null = null; // cached; rebuilt only on resize
+  private floorGrad: CanvasGradient | null = null; // cached; rebuilt on resize/shrink
+  private floorGradR = -1;
   private anim = new Map<string, AnimState>();
   private lastNow = performance.now();
 
@@ -114,6 +116,7 @@ export class Renderer {
     vg.addColorStop(0, 'rgba(0,0,0,0)');
     vg.addColorStop(1, 'rgba(0,0,0,0.55)');
     this.vignette = vg;
+    this.floorGradR = -1; // geometry changed — force the floor gradient to rebuild
   }
 
   private toScreen(p: { x: number; y: number }): { x: number; y: number } {
@@ -178,12 +181,19 @@ export class Renderer {
     ctx.save();
     ctx.clip();
 
-    // base + warm overhead light pooling near the centre
-    const g = ctx.createRadialGradient(this.cx, this.cy - r * this.scale * 0.15, r * this.scale * 0.1, this.cx, this.cy, r * this.scale * 1.2);
-    g.addColorStop(0, '#2a2532');
-    g.addColorStop(0.6, C.tatame);
-    g.addColorStop(1, '#141119');
-    ctx.fillStyle = g;
+    // base + warm overhead light pooling near the centre. Cached and rebuilt
+    // only when the radius shifts a whole pixel (the shrink is slow) — the
+    // gradient was the single most-allocated object per frame.
+    const rr = Math.round(r);
+    if (!this.floorGrad || this.floorGradR !== rr) {
+      const g = ctx.createRadialGradient(this.cx, this.cy - rr * this.scale * 0.15, rr * this.scale * 0.1, this.cx, this.cy, rr * this.scale * 1.2);
+      g.addColorStop(0, '#2a2532');
+      g.addColorStop(0.6, C.tatame);
+      g.addColorStop(1, '#141119');
+      this.floorGrad = g;
+      this.floorGradR = rr;
+    }
+    ctx.fillStyle = this.floorGrad;
     ctx.fillRect(0, 0, this.W, this.H);
 
     // wood planks
@@ -281,20 +291,23 @@ export class Renderer {
     // NOTE: never set ctx.shadowBlur inside this loop — a per-particle gaussian
     // blur is the #1 Canvas2D mobile cost. For "glow" particles (embers) we fake
     // bloom with a single larger, translucent arc instead.
+    // Inline the transform (no per-particle {x,y} allocation) — this is the
+    // hottest loop, up to ~90 particles/frame under load.
     for (const p of arr) {
       const k = 1 - p.life / p.maxLife;
-      const s = this.toScreen(p);
+      const sx = this.cx + p.x * this.scale;
+      const sy = this.cy + p.y * this.scale;
       const rr = p.size * this.scale * (0.5 + k * 0.5);
       ctx.fillStyle = p.color;
       if (glow < 1) {
         ctx.globalAlpha = k * 0.22;
         ctx.beginPath();
-        ctx.arc(s.x, s.y, rr * 2.3, 0, Math.PI * 2);
+        ctx.arc(sx, sy, rr * 2.3, 0, Math.PI * 2);
         ctx.fill();
       }
       ctx.globalAlpha = k * glow;
       ctx.beginPath();
-      ctx.arc(s.x, s.y, rr, 0, Math.PI * 2);
+      ctx.arc(sx, sy, rr, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.globalAlpha = 1;

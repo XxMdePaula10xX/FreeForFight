@@ -32,6 +32,34 @@ export function shade(hex: string, amt: number): string {
 
 const VOID = '#0d0b0f';
 
+// Gradient cache. A CanvasGradient's coordinates are interpreted in the CTM in
+// effect when it's painted, so a gradient built once in local space (centred on
+// the origin) can be reused every frame by translating the context to the
+// fighter before filling — no per-disc allocation. Keyed by radius (px), which
+// only changes on viewport resize; the body gradient additionally by colour.
+const bodyGradCache = new Map<string, { R: number; grad: CanvasGradient }>();
+let headGradCache: { R: number; grad: CanvasGradient } | null = null;
+
+function bodyGradient(ctx: CanvasRenderingContext2D, color: string, R: number): CanvasGradient {
+  const hit = bodyGradCache.get(color);
+  if (hit && hit.R === R) return hit.grad;
+  const grad = ctx.createRadialGradient(-R * 0.35, -R * 0.4, R * 0.15, 0, 0, R * 1.15);
+  grad.addColorStop(0, shade(color, 0.42));
+  grad.addColorStop(0.55, color);
+  grad.addColorStop(1, shade(color, -0.28));
+  bodyGradCache.set(color, { R, grad });
+  return grad;
+}
+
+function headGradient(ctx: CanvasRenderingContext2D, hR: number): CanvasGradient {
+  if (headGradCache && headGradCache.R === hR) return headGradCache.grad;
+  const grad = ctx.createRadialGradient(-hR * 0.3, -hR * 0.4, hR * 0.2, 0, 0, hR);
+  grad.addColorStop(0, '#f2d9b8');
+  grad.addColorStop(1, '#d9a877');
+  headGradCache = { R: hR, grad };
+  return grad;
+}
+
 export function drawFighter(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -79,25 +107,17 @@ export function drawFighter(
   }
 
   // ---- body ---------------------------------------------------------------
-  const grad = ctx.createRadialGradient(
-    x - R * 0.35,
-    cy - R * 0.4,
-    R * 0.15,
-    x,
-    cy,
-    R * 1.15,
-  );
-  grad.addColorStop(0, shade(s.color, 0.42));
-  grad.addColorStop(0.55, s.color);
-  grad.addColorStop(1, shade(s.color, -0.28));
-
+  // Cached gradient (built at the origin) + translate, so no per-frame alloc.
+  ctx.save();
+  ctx.translate(x, cy);
   ctx.beginPath();
-  ctx.ellipse(x, cy, bodyRx, bodyRy, 0, 0, Math.PI * 2);
-  ctx.fillStyle = grad;
+  ctx.ellipse(0, 0, bodyRx, bodyRy, 0, 0, Math.PI * 2);
+  ctx.fillStyle = bodyGradient(ctx, s.color, R);
   ctx.fill();
   ctx.lineWidth = R * 0.16;
   ctx.strokeStyle = VOID;
   ctx.stroke();
+  ctx.restore();
 
   // belly highlight
   ctx.beginPath();
@@ -127,17 +147,17 @@ export function drawFighter(
   ctx.arc(hx - fx * hR * 0.5, hy - fy * hR * 0.5 - R * 0.08, hR * 0.45, 0, Math.PI * 2);
   ctx.fillStyle = '#241f2b';
   ctx.fill();
-  // head
+  // head (cached gradient via translate; same skin tone for everyone)
+  ctx.save();
+  ctx.translate(hx, hy);
   ctx.beginPath();
-  ctx.arc(hx, hy, hR, 0, Math.PI * 2);
-  const hg = ctx.createRadialGradient(hx - hR * 0.3, hy - hR * 0.4, hR * 0.2, hx, hy, hR);
-  hg.addColorStop(0, '#f2d9b8');
-  hg.addColorStop(1, '#d9a877');
-  ctx.fillStyle = hg;
+  ctx.arc(0, 0, hR, 0, Math.PI * 2);
+  ctx.fillStyle = headGradient(ctx, hR);
   ctx.fill();
   ctx.lineWidth = R * 0.12;
   ctx.strokeStyle = VOID;
   ctx.stroke();
+  ctx.restore();
   // eyes
   const ex = hx + fx * hR * 0.35;
   const ey = hy + fy * hR * 0.35;
