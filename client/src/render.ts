@@ -82,6 +82,7 @@ export class Renderer {
   cx = 0;
   cy = 0;
   safeTop = 0; // iOS status-bar / notch inset so the scoreboard clears it
+  private vignette: CanvasGradient | null = null; // cached; rebuilt only on resize
   private anim = new Map<string, AnimState>();
   private lastNow = performance.now();
 
@@ -105,6 +106,14 @@ export class Renderer {
     this.scale = Math.min(this.W, this.H - margin) / (TUNING.arena.startRadius * 2.15);
     this.cx = this.W / 2;
     this.cy = (this.H + margin * 0.3) / 2;
+    // rebuild the cached vignette (only changes with viewport size)
+    const vg = this.ctx.createRadialGradient(
+      this.cx, this.cy, Math.min(this.W, this.H) * 0.35,
+      this.cx, this.cy, Math.max(this.W, this.H) * 0.75,
+    );
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, 'rgba(0,0,0,0.55)');
+    this.vignette = vg;
   }
 
   private toScreen(p: { x: number; y: number }): { x: number; y: number } {
@@ -241,9 +250,9 @@ export class Renderer {
 
     const danger = 1 - clamp((r - TUNING.arena.endRadius) / (startR - TUNING.arena.endRadius), 0, 1);
 
-    // spawn embers rising off the hot border, more as it closes in
-    const emberCount = danger * 1.5;
-    if (Math.random() < emberCount) {
+    // spawn embers rising off the hot border, more as it closes in (probability
+    // clamped < 1 so it stays stochastic; effects caps the total count)
+    if (Math.random() < Math.min(0.85, danger * 1.1)) {
       const vs = vertices(r);
       const e = Math.floor(Math.random() * 8);
       const a = vs[e];
@@ -269,19 +278,24 @@ export class Renderer {
 
   private drawParticles(_effects: Effects, arr: import('./effects').Particle[], glow: number): void {
     const ctx = this.ctx;
+    // NOTE: never set ctx.shadowBlur inside this loop — a per-particle gaussian
+    // blur is the #1 Canvas2D mobile cost. For "glow" particles (embers) we fake
+    // bloom with a single larger, translucent arc instead.
     for (const p of arr) {
       const k = 1 - p.life / p.maxLife;
       const s = this.toScreen(p);
-      ctx.globalAlpha = k * glow;
-      if (glow < 1) {
-        ctx.shadowColor = p.color;
-        ctx.shadowBlur = 6;
-      }
-      ctx.beginPath();
-      ctx.arc(s.x, s.y, p.size * this.scale * (0.5 + k * 0.5), 0, Math.PI * 2);
+      const rr = p.size * this.scale * (0.5 + k * 0.5);
       ctx.fillStyle = p.color;
+      if (glow < 1) {
+        ctx.globalAlpha = k * 0.22;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, rr * 2.3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = k * glow;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, rr, 0, Math.PI * 2);
       ctx.fill();
-      ctx.shadowBlur = 0;
     }
     ctx.globalAlpha = 1;
   }
@@ -337,11 +351,18 @@ export class Renderer {
         squash: st.push * 0.4,
       });
 
-      // armed with a Super Empurrão (picked up the Núcleo)
+      // armed with a Super Empurrão (picked up the Núcleo). A white ring under
+      // the gold keeps it readable even on the yellow player (colours collide).
       if (input.clientTick < d.coreChargeUntil) {
         const pulse = 0.5 + 0.5 * Math.sin(now / 90);
+        const rr = rad + 6 + pulse * 4;
         this.ctx.beginPath();
-        this.ctx.arc(s.x, s.y, rad + 6 + pulse * 4, 0, Math.PI * 2);
+        this.ctx.arc(s.x, s.y, rr + 2, 0, Math.PI * 2);
+        this.ctx.strokeStyle = C.marca;
+        this.ctx.lineWidth = 2;
+        this.ctx.stroke();
+        this.ctx.beginPath();
+        this.ctx.arc(s.x, s.y, rr, 0, Math.PI * 2);
         this.ctx.strokeStyle = '#ffdf6b';
         this.ctx.lineWidth = 3;
         this.ctx.shadowColor = '#ffdf6b';
@@ -509,10 +530,7 @@ export class Renderer {
 
   private drawVignette(): void {
     const ctx = this.ctx;
-    const g = ctx.createRadialGradient(this.cx, this.cy, Math.min(this.W, this.H) * 0.35, this.cx, this.cy, Math.max(this.W, this.H) * 0.75);
-    g.addColorStop(0, 'rgba(0,0,0,0)');
-    g.addColorStop(1, 'rgba(0,0,0,0.55)');
-    ctx.fillStyle = g;
+    ctx.fillStyle = this.vignette ?? 'rgba(0,0,0,0)';
     ctx.fillRect(0, 0, this.W, this.H);
   }
 
@@ -562,28 +580,30 @@ export class Renderer {
       x += gap;
     }
 
+    // Archivo Black only ships a 400 face — request 400 (never 900) to avoid
+    // synthetic faux-bold on an already ultra-heavy display face.
     ctx.textAlign = 'center';
     if (input.phase === 'countdown') {
       const left = Math.ceil(input.countdownLeft);
-      ctx.font = "900 96px 'Archivo Black', system-ui, sans-serif";
+      ctx.font = `400 ${Math.round(96 * lt)}px 'Archivo Black', system-ui, sans-serif`;
       ctx.fillStyle = C.marca;
       ctx.shadowColor = C.perigo;
       ctx.shadowBlur = 24;
       ctx.fillText(left > 0 ? String(left) : 'VAI!', this.W / 2, this.cy);
       ctx.shadowBlur = 0;
     } else if (input.phase === 'playing') {
-      ctx.font = "700 15px 'JetBrains Mono', monospace";
+      ctx.font = `700 ${Math.round(15 * lt)}px 'JetBrains Mono', monospace`;
       const urgent = input.roundTimeLeft < 10;
       ctx.fillStyle = urgent ? C.perigo : '#8d8898';
       if (urgent) {
         ctx.shadowColor = C.perigo;
         ctx.shadowBlur = 12;
       }
-      ctx.fillText(input.roundTimeLeft.toFixed(1) + 's', this.W / 2, 52);
+      ctx.fillText(input.roundTimeLeft.toFixed(1) + 's', this.W / 2, top + 52);
       ctx.shadowBlur = 0;
     } else if (input.phase === 'round_end') {
       const w = input.roundWinnerId;
-      ctx.font = "900 44px 'Archivo Black', system-ui, sans-serif";
+      ctx.font = `400 ${Math.round(44 * lt)}px 'Archivo Black', system-ui, sans-serif`;
       ctx.fillStyle = w ? this.colorOf(w, input) : '#8d8898';
       ctx.shadowColor = 'rgba(0,0,0,0.6)';
       ctx.shadowBlur = 12;

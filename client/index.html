@@ -2,7 +2,8 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <!-- No maximum-scale / user-scalable=no: blocking zoom fails WCAG 1.4.4. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#0d0b0f" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230d0b0f'/%3E%3Cpolygon points='11,5 21,5 27,11 27,21 21,27 11,27 5,21 5,11' fill='none' stroke='%23ff4d2e' stroke-width='2.5'/%3E%3C/svg%3E" />
   <title>Octógono</title>
@@ -52,7 +53,7 @@
       </div>
 
       <button id="btnHowto" class="link-btn">Como jogar</button>
-      <p id="homeError" class="error hidden"></p>
+      <p id="homeError" class="error hidden" role="alert" aria-live="assertive"></p>
     </div>
   </section>
 
@@ -77,6 +78,7 @@
       <div id="endScores" class="endscores"></div>
       <p id="endTally" class="tally hidden"></p>
       <button id="btnAgain" class="primary hidden">Jogar de novo</button>
+      <p id="endHint" class="hint hidden"></p>
       <div class="end-row">
         <button id="btnShare" class="ghost">Compartilhar</button>
         <button id="btnMenu" class="ghost">Menu</button>
@@ -97,6 +99,15 @@
 
   <!-- just-in-time callout banner -->
   <div id="callout" class="callout hidden"></div>
+
+  <!-- connection-lost overlay (online) -->
+  <div id="netOverlay" class="net-overlay hidden" role="alert" aria-live="assertive">
+    <div class="net-card">
+      <div class="net-spinner" aria-hidden="true"></div>
+      <p id="netMsg" class="net-msg">Conexão perdida — reconectando…</p>
+      <button id="netMenu" class="ghost hidden">Voltar ao menu</button>
+    </div>
+  </div>
 
   <!-- SETTINGS -->
   <button id="gear" class="gear" aria-label="Ajustes">⚙</button>

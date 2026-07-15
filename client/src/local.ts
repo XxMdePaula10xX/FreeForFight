@@ -149,6 +149,9 @@ export class LocalGame {
       return makeDisc(id, { x: Math.cos(a) * spawnR, y: Math.sin(a) * spawnR });
     });
     this.sim.discs = discs;
+    // Reset the Núcleo each round (the server gets this free via a fresh sim;
+    // solo persists the sim, so without this the orb can carry over pre-armed).
+    this.sim.core = { present: false, respawnAtTick: 0 };
     this.sim.roundStartTick = this.sim.tick + COUNTDOWN_TICKS;
     this.sim.arenaRadius = TUNING.arena.startRadius;
     this.roundWinnerId = null;

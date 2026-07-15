@@ -54,7 +54,7 @@ export class Effects {
         this.rings.push({ pos: { ...e.pos }, t0: now, dur: 240, color: '#f5f2e8', maxR: TUNING.push.range, width: 4 });
         // shove cone biased along the push direction, brighter with force
         this.burst(e.pos, '#f5f2e8', 8 + Math.round(mag * 8), 140 + mag * 160, e.dir);
-        this.shake = Math.max(this.shake, 2 + mag * 4);
+        if (!reduced()) this.shake = Math.max(this.shake, 2 + mag * 4);
         break;
       case 'ghostPush':
         this.rings.push({ pos: { ...e.pos }, t0: now, dur: 220, color: '#c7c2d2', maxR: TUNING.ghost.range, width: 3 });
@@ -64,8 +64,10 @@ export class Effects {
         this.burst(e.pos, '#4dd8ff', 18, 260, e.dir);
         this.burst(e.pos, '#ffffff', 8, 200, e.dir);
         this.flash = 1;
-        this.shake = Math.max(this.shake, 6 + mag * 6);
-        if (!reduced()) this.hitstopUntil = now + 70;
+        if (!reduced()) {
+          this.shake = Math.max(this.shake, 6 + mag * 6);
+          this.hitstopUntil = now + 70;
+        }
         break;
       case 'reflect':
         this.rings.push({ pos: { ...e.pos }, t0: now, dur: 220, color: '#4dd8ff', maxR: 48, width: 3 });
@@ -76,7 +78,7 @@ export class Effects {
         this.burst(e.pos, '#fffbe6', 8, 200);
         break;
       case 'eliminated':
-        this.shake = Math.max(this.shake, 8);
+        if (!reduced()) this.shake = Math.max(this.shake, 8);
         this.burst(e.pos, colorOf(e.playerId), 24, 320);
         if (!reduced()) this.falls.push({ pos: { ...e.pos }, vel: { x: 0, y: 0 }, t0: now, color: colorOf(e.playerId) });
         break;
@@ -121,9 +123,22 @@ export class Effects {
     });
   }
 
-  // Ambient embers that rise near the shrinking danger border.
+  // Clear all transient state — called on match/mode changes so stale rings,
+  // particles, shake, and hitstop never bleed across boundaries.
+  reset(): void {
+    this.rings.length = 0;
+    this.falls.length = 0;
+    this.particles.length = 0;
+    this.embers.length = 0;
+    this.flash = 0;
+    this.shake = 0;
+    this.hitstopUntil = 0;
+  }
+
+  // Ambient embers that rise near the shrinking danger border. Capped so a long
+  // late-round can't grow an unbounded array (perf + GC).
   spawnEmber(pos: { x: number; y: number }): void {
-    if (reduced()) return;
+    if (reduced() || this.embers.length >= 40) return;
     this.embers.push({
       x: pos.x,
       y: pos.y,

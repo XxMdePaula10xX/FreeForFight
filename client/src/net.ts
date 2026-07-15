@@ -22,6 +22,7 @@ import type {
 } from '../../shared/protocol';
 import { encode, decode } from '../../shared/protocol';
 import { TUNING } from '../../shared/tuning';
+import { ssSet } from './storage';
 
 const INTERP_DELAY_MS = 100;
 const MAX_SMOOTH = 120; // px — bigger corrections snap instead of easing
@@ -59,6 +60,12 @@ export interface NetCallbacks {
   onMatchEnded?: (winnerId: string | null, scores: Record<string, number>) => void;
   onEvent?: (e: SimEventLike) => void;
   onPhase?: (phase: Phase) => void;
+  // Connection lifecycle (online only). onDisconnect fires when an established
+  // session drops unexpectedly and auto-reconnect begins; onReconnected when the
+  // room is rejoined; onReconnectFailed when every retry is exhausted.
+  onDisconnect?: () => void;
+  onReconnected?: () => void;
+  onReconnectFailed?: () => void;
 }
 
 export class NetClient {
@@ -89,6 +96,11 @@ export class NetClient {
   // Artificial one-way latency for local testing (PRD §12 step 5). 0 = off.
   private lagMs: number;
 
+  // reconnect state
+  private intentional = false; // we asked to close — don't try to recover
+  private reconnecting = false; // a recovery loop is currently running
+  private reconnectAck: ((ok: boolean) => void) | null = null;
+
   constructor(url: string, cb: NetCallbacks, lagMs = 0) {
     this.url = url;
     this.cb = cb;
@@ -96,16 +108,110 @@ export class NetClient {
   }
 
   connect(): Promise<void> {
+    this.intentional = false;
+    return this.openSocket();
+  }
+
+  // Open a fresh WebSocket and wire its handlers. Resolves when the socket is
+  // OPEN (not when the room is confirmed). Rejects if it fails before opening.
+  private openSocket(): Promise<void> {
     return new Promise((resolve, reject) => {
-      this.ws = new WebSocket(this.url);
-      this.ws.onopen = () => resolve();
-      this.ws.onerror = () => reject(new Error('Falha ao conectar ao servidor.'));
-      this.ws.onmessage = (ev) => {
+      let settled = false;
+      const ws = new WebSocket(this.url);
+      this.ws = ws;
+      ws.onopen = () => {
+        settled = true;
+        resolve();
+      };
+      ws.onerror = () => {
+        if (!settled) {
+          settled = true;
+          reject(new Error('Falha ao conectar ao servidor.'));
+        }
+      };
+      ws.onmessage = (ev) => {
         const data = ev.data as string;
         if (this.lagMs > 0) setTimeout(() => this.onMessage(decode<ServerMessage>(data)), this.lagMs);
         else this.onMessage(decode<ServerMessage>(data));
       };
-      this.ws.onclose = () => this.cb.onError?.('Conexão perdida.');
+      ws.onclose = () => this.handleClose();
+    });
+  }
+
+  // Deliberately leave the room / tear down (menu, back-out). Suppresses the
+  // auto-reconnect that an unexpected drop would trigger.
+  close(): void {
+    this.intentional = true;
+    try {
+      this.ws?.close();
+    } catch {
+      /* already closed */
+    }
+    this.ws = null;
+  }
+
+  private handleClose(): void {
+    this.ws = null;
+    if (this.intentional) return;
+    // A reconnect attempt's own socket failing resolves through reconnectAck;
+    // don't spawn a second recovery loop.
+    if (this.reconnecting) return;
+    // Unexpected drop of an established session -> try to rejoin. With no session
+    // yet (never joined a room), just surface the error.
+    if (this.playerId && this.code) void this.tryReconnect();
+    else this.cb.onError?.('Conexão perdida.');
+  }
+
+  // Best-effort recovery: reopen the socket and rejoin the room using the stored
+  // player id as a bearer token, with a bounded backoff. The server keeps a
+  // disconnected player's disc alive for a short grace window.
+  private async tryReconnect(): Promise<void> {
+    if (this.reconnecting) return;
+    this.reconnecting = true;
+    this.cb.onDisconnect?.();
+    const delays = [400, 900, 1800, 3000, 5000];
+    for (let i = 0; i < delays.length && !this.intentional; i++) {
+      await new Promise((r) => setTimeout(r, delays[i]));
+      if (this.intentional) break;
+      let opened = false;
+      try {
+        await this.openSocket();
+        opened = true;
+      } catch {
+        /* socket didn't open — back off and retry */
+      }
+      if (!opened || this.intentional) continue;
+      // Socket up. The reconnecting client restarts its input sequence at 1 and
+      // drops all prediction/interpolation state before rejoining.
+      this.seq = 1;
+      this.resetPrediction();
+      const ok = await this.awaitReconnectAck();
+      if (ok) {
+        this.reconnecting = false;
+        this.cb.onReconnected?.();
+        return;
+      }
+      // Rejoin was rejected (session expired) — the same token won't work again.
+      break;
+    }
+    this.reconnecting = false;
+    if (!this.intentional) this.cb.onReconnectFailed?.();
+  }
+
+  // Send the reconnect request and resolve true on 'joined', false on 'error' or
+  // a timeout with no reply.
+  private awaitReconnectAck(): Promise<boolean> {
+    return new Promise((resolve) => {
+      let done = false;
+      const finish = (ok: boolean): void => {
+        if (done) return;
+        done = true;
+        this.reconnectAck = null;
+        resolve(ok);
+      };
+      this.reconnectAck = finish;
+      this.reconnectRoom(this.playerId, this.code);
+      setTimeout(() => finish(false), 4000);
     });
   }
 
@@ -148,11 +254,18 @@ export class NetClient {
       case 'joined':
         this.playerId = msg.playerId;
         this.code = msg.code;
-        sessionStorage.setItem('octogono_pid', msg.playerId);
-        sessionStorage.setItem('octogono_code', msg.code);
+        ssSet('octogono_pid', msg.playerId);
+        ssSet('octogono_code', msg.code);
+        this.reconnectAck?.(true); // resolves a pending reconnect, if any
         this.cb.onJoined?.(msg.playerId, msg.code);
         break;
       case 'error':
+        // A pending reconnect consumes the error (expired session) rather than
+        // surfacing it over the reconnecting overlay.
+        if (this.reconnectAck) {
+          this.reconnectAck(false);
+          break;
+        }
         this.cb.onError?.(msg.message);
         break;
       case 'room_state':

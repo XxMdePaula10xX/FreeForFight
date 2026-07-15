@@ -91,8 +91,17 @@ export class InputController {
   }
 
   private setupButton(el: HTMLElement, kind: 'push' | 'reflect', set: (v: boolean) => void): void {
+    let activeId: number | null = null;
     el.addEventListener('pointerdown', (e) => {
       e.preventDefault();
+      activeId = e.pointerId;
+      // Capture the pointer so a thumb that slides off the button edge mid-press
+      // keeps sending events (and doesn't silently drop the input).
+      try {
+        el.setPointerCapture(e.pointerId);
+      } catch {
+        /* not supported — fine */
+      }
       // Always mirror the button into the input signal (holding through a
       // cooldown auto-fires the instant it's ready). Feedback is cosmetic:
       // a fire when ready, a "denied" nudge when still cooling.
@@ -107,13 +116,15 @@ export class InputController {
         hapticPress();
       }
     });
-    const release = () => {
+    const release = (e: PointerEvent) => {
+      if (activeId !== null && e.pointerId !== activeId) return; // ignore other fingers
+      activeId = null;
       set(false);
       el.classList.remove('pressed');
     };
+    // No pointerleave release — with pointer capture the finger may drift off.
     el.addEventListener('pointerup', release);
     el.addEventListener('pointercancel', release);
-    el.addEventListener('pointerleave', release);
   }
 
   // Drive the on-button cooldown radials from the self disc's state (0 = ready,

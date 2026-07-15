@@ -17,7 +17,8 @@ workflows:
         # Point the packaged app at your deployed server for ONLINE play.
         # Leave empty to ship a solo-only build (works fully offline).
         VITE_WS_URL: 'wss://octogono.fly.dev'
-      node: 20
+        MARKETING_VERSION: '1.0.0' # CFBundleShortVersionString (bump per release)
+      node: 22
       xcode: latest
       cocoapods: default
     scripts:
@@ -32,9 +33,15 @@ workflows:
           cd client
           npx cap add ios || true
           npx cap sync ios
-      - name: Configure Info.plist (export compliance + orientation)
+      - name: Configure Info.plist (version, export compliance, orientation)
         script: |
           PLIST="$CM_BUILD_DIR/client/ios/App/App/Info.plist"
+          # Every TestFlight upload needs a UNIQUE, increasing CFBundleVersion.
+          # Codemagic's $BUILD_NUMBER auto-increments per build — use it.
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$PLIST" \
+            || /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $BUILD_NUMBER" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $MARKETING_VERSION" "$PLIST" \
+            || /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string $MARKETING_VERSION" "$PLIST"
           # Uses only standard TLS/HTTPS -> exempt from export compliance. Setting
           # this avoids the manual encryption question on every TestFlight upload.
           /usr/libexec/PlistBuddy -c "Delete :ITSAppUsesNonExemptEncryption" "$PLIST" 2>/dev/null || true
@@ -43,10 +50,18 @@ workflows:
           /usr/libexec/PlistBuddy -c "Delete :UISupportedInterfaceOrientations" "$PLIST" 2>/dev/null || true
           /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations array" "$PLIST"
           /usr/libexec/PlistBuddy -c "Add :UISupportedInterfaceOrientations:0 string UIInterfaceOrientationPortrait" "$PLIST"
+      - name: Install privacy manifest (App Store requirement)
+        script: |
+          # Apple requires a PrivacyInfo.xcprivacy at review. We collect no data.
+          cp "$CM_BUILD_DIR/client/ios-privacy/PrivacyInfo.xcprivacy" \
+             "$CM_BUILD_DIR/client/ios/App/App/PrivacyInfo.xcprivacy"
       - name: Generate icons & splash
         script: |
           cd client
-          npx @capacitor/assets generate --ios || echo "assets step skipped"
+          npx @capacitor/assets generate --ios \
+            --iconBackgroundColor '#0d0b0f' --iconBackgroundColorDark '#0d0b0f' \
+            --splashBackgroundColor '#0d0b0f' --splashBackgroundColorDark '#0d0b0f' \
+            || echo "assets step skipped"
       - name: Install CocoaPods
         script: |
           cd client/ios/App
@@ -81,7 +96,8 @@ workflows:
       vars:
         PACKAGE_NAME: 'com.matheus.octogono'
         VITE_WS_URL: 'wss://octogono.fly.dev' # empty = solo-only (offline) build
-      node: 20
+        MARKETING_VERSION: '1.0.0' # versionName (bump per release)
+      node: 22
     scripts:
       - name: Install dependencies
         script: npm ci
@@ -94,6 +110,20 @@ workflows:
           cd client
           npx cap add android || true
           npx cap sync android
+      - name: Generate icons & splash (adaptive)
+        script: |
+          cd client
+          npx @capacitor/assets generate --android \
+            --iconBackgroundColor '#0d0b0f' --iconBackgroundColorDark '#0d0b0f' \
+            --splashBackgroundColor '#0d0b0f' --splashBackgroundColorDark '#0d0b0f' \
+            || echo "assets step skipped"
+      - name: Bump versionCode / versionName
+        script: |
+          # Play requires a unique, increasing versionCode per upload.
+          GRADLE="$CM_BUILD_DIR/client/android/app/build.gradle"
+          sed -i "s/versionCode [0-9]\+/versionCode $BUILD_NUMBER/" "$GRADLE"
+          sed -i "s/versionName \"[^\"]*\"/versionName \"$MARKETING_VERSION\"/" "$GRADLE"
+          echo "--- versioning ---"; grep -E "versionCode|versionName" "$GRADLE"
       - name: Set up keystore (release signing)
         script: |
           echo "$CM_KEYSTORE" | base64 --decode > "$CM_BUILD_DIR/client/android/app/release.keystore" || true

@@ -15,10 +15,11 @@ import type { Difficulty } from './ai';
 import { InputController } from './input';
 import { Effects } from './effects';
 import { Renderer } from './render';
-import { initNative, isNative } from './native';
+import { initNative, isNative, exitApp } from './native';
 import { hapticPushLand, hapticReflectHit, hapticEliminated } from './haptics';
 import { settings, setSetting, applyToDocument } from './settings';
 import { unlockAudio, sfxPush, sfxClash, sfxEliminated, sfxCountdown, sfxCore } from './sfx';
+import { ssGet, ssSet, lsGet } from './storage';
 import { TUNING, MAX_ROUND_TICKS } from '../../shared/tuning';
 import type { PlayerInfo, Phase, SimEventKind } from '../../shared/protocol';
 import type { SimEvent } from '../../shared/types';
@@ -71,6 +72,10 @@ const endTally = $('#endTally');
 const calloutEl = $('#callout');
 const homeError = $('#homeError');
 
+const netOverlay = $('#netOverlay');
+const netMsg = $('#netMsg');
+const netMenu = $('#netMenu') as HTMLButtonElement;
+
 const lobbyCode = $('#lobbyCode');
 const lobbyPlayers = $('#lobbyPlayers');
 const btnStart = $('#btnStart') as HTMLButtonElement;
@@ -81,6 +86,7 @@ const endTitle = $('#endTitle');
 const endScores = $('#endScores');
 const btnAgain = $('#btnAgain') as HTMLButtonElement;
 const btnMenu = $('#btnMenu');
+const endHint = $('#endHint');
 
 function showScreen(name: 'home' | 'lobby' | 'match' | 'end'): void {
   screens.home.classList.toggle('hidden', name !== 'home');
@@ -123,7 +129,7 @@ renderer.safeTop = probe.offsetHeight || 0;
 const params = new URLSearchParams(location.search);
 const preCode = params.get('sala');
 if (preCode) codeInput.value = preCode.toUpperCase();
-nickInput.value = sessionStorage.getItem('octogono_nick') ?? '';
+nickInput.value = ssGet('octogono_nick') ?? '';
 const lagMs = Number(params.get('lat')) || 0; // ?lat=120 simulates 120ms latency
 if (params.has('touch')) document.body.classList.add('force-touch'); // preview mobile HUD on desktop
 
@@ -132,7 +138,7 @@ function makeNet(): NetClient {
   const n = new NetClient(
     WS_URL,
     {
-      onJoined: () => sessionStorage.setItem('octogono_nick', nickInput.value),
+      onJoined: () => ssSet('octogono_nick', nickInput.value),
       onError: (m) => showHomeError(m),
       onRoomState: (code, phase, players, hostId) => {
         renderLobby(code, players, hostId);
@@ -164,12 +170,30 @@ function makeNet(): NetClient {
         coreCallout(e, net!.playerId);
       },
       onPhase: () => {},
+      onDisconnect: () => showNetOverlay('Conexão perdida — reconectando…', false),
+      onReconnected: () => hideNetOverlay(),
+      onReconnectFailed: () =>
+        showNetOverlay('Não foi possível reconectar.', true),
     },
     lagMs,
   );
   (window as any).__net = n;
   return n;
 }
+
+function showNetOverlay(message: string, failed: boolean): void {
+  netMsg.textContent = message;
+  netMenu.classList.toggle('hidden', !failed); // only offer "menu" once recovery gave up
+  netOverlay.classList.remove('hidden');
+}
+function hideNetOverlay(): void {
+  netOverlay.classList.add('hidden');
+}
+// Give up on the room and return to a clean home screen.
+netMenu.addEventListener('click', () => {
+  net?.close();
+  location.reload();
+});
 
 async function ensureConnected(): Promise<boolean> {
   homeError.classList.add('hidden');
@@ -218,10 +242,17 @@ segChoose(segDiff, (d) => (selDiff = d as Difficulty));
 segChoose(segFmt, (f) => (selFast = f === 'fast'));
 
 function segChoose(group: HTMLElement, set: (v: string) => void): void {
-  group.querySelectorAll('button').forEach((b) =>
+  const btns = group.querySelectorAll('button');
+  // segmented control = single-select toggle group; reflect state to AT.
+  btns.forEach((b) => b.setAttribute('aria-pressed', String(b.classList.contains('on'))));
+  btns.forEach((b) =>
     b.addEventListener('click', () => {
-      group.querySelectorAll('button').forEach((x) => x.classList.remove('on'));
+      btns.forEach((x) => {
+        x.classList.remove('on');
+        x.setAttribute('aria-pressed', 'false');
+      });
       b.classList.add('on');
+      b.setAttribute('aria-pressed', 'true');
       set((b.dataset.b ?? b.dataset.d ?? b.dataset.f)!);
     }),
   );
@@ -252,19 +283,29 @@ function startTutorial(): void {
   showScreen('match');
 }
 
-const tutorialDone = () => {
-  try {
-    return localStorage.getItem('octogono_tutorial_done') === '1';
-  } catch {
-    return false;
-  }
-};
+const tutorialDone = () => lsGet('octogono_tutorial_done') === '1';
+
+// The interactive tutorial teaches the on-screen touch controls (joystick + A/B)
+// and its whole overlay is hidden by CSS on `pointer: fine` (desktop mouse). On
+// such a device it would run invisibly with no visible Skip and no way to satisfy
+// "toque A" from the keyboard (A = move-left; push = Space) — a first-run softlock.
+// So on non-touch we never launch it: first play drops straight into a match, and
+// "Como jogar" shows the keyboard legend instead. `?touch` forces the touch path.
+const touchControls = (): boolean =>
+  params.has('touch') || !window.matchMedia('(pointer: fine)').matches;
+
+function desktopHelp(): void {
+  showCallout('Teclado — WASD/setas: mover · Espaço: empurrar · Shift: refletir');
+}
 
 btnSolo.addEventListener('click', () => {
-  if (tutorialDone()) startSolo();
-  else startTutorial(); // teach the controls on the very first play
+  if (tutorialDone() || !touchControls()) startSolo();
+  else startTutorial(); // teach the controls on the very first play (touch only)
 });
-btnHowto.addEventListener('click', startTutorial); // replay any time
+btnHowto.addEventListener('click', () => {
+  if (touchControls()) startTutorial(); // replay any time
+  else desktopHelp();
+});
 
 // ---- settings --------------------------------------------------------------
 applyToDocument();
@@ -281,16 +322,30 @@ function syncSettingsUI(): void {
   setHaptics.checked = settings.haptics;
   setReduce.checked = settings.reducedMotion;
   setText.checked = settings.largeText;
-  segHand.querySelectorAll('button').forEach((b) => b.classList.toggle('on', (b as HTMLElement).dataset.h === settings.hand));
+  segHand.querySelectorAll('button').forEach((b) => {
+    const on = (b as HTMLElement).dataset.h === settings.hand;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', String(on));
+  });
 }
-gear.addEventListener('click', () => {
+function openSettings(): void {
   syncSettingsUI();
   settingsModal.classList.remove('hidden');
   paused = true;
-});
-$('#setClose').addEventListener('click', () => {
+}
+function closeSettings(): void {
   settingsModal.classList.add('hidden');
   paused = false;
+}
+gear.addEventListener('click', openSettings);
+$('#setClose').addEventListener('click', closeSettings);
+// Tap the dimmed backdrop (anywhere outside the card) to dismiss.
+settingsModal.addEventListener('click', (e) => {
+  if (e.target === settingsModal) closeSettings();
+});
+// Escape closes the modal (desktop / keyboard users).
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !settingsModal.classList.contains('hidden')) closeSettings();
 });
 setSound.addEventListener('change', () => setSetting('sound', setSound.checked));
 setHaptics.addEventListener('change', () => setSetting('haptics', setHaptics.checked));
@@ -298,8 +353,12 @@ setReduce.addEventListener('change', () => setSetting('reducedMotion', setReduce
 setText.addEventListener('change', () => setSetting('largeText', setText.checked));
 segHand.querySelectorAll('button').forEach((b) =>
   b.addEventListener('click', () => {
-    segHand.querySelectorAll('button').forEach((x) => x.classList.remove('on'));
+    segHand.querySelectorAll('button').forEach((x) => {
+      x.classList.remove('on');
+      x.setAttribute('aria-pressed', 'false');
+    });
     b.classList.add('on');
+    b.setAttribute('aria-pressed', 'true');
     setSetting('hand', (b as HTMLElement).dataset.h as 'R' | 'L');
   }),
 );
@@ -326,21 +385,33 @@ function resetMatchExtras(): void {
   calloutGhost = false;
   slowmoUntil = 0;
   lastBeepSec = -1;
+  // Clear any lingering rings/particles/shake/hitstop from the previous match so
+  // a new round never opens mid-effect (or frozen by a stale hitstop deadline).
+  effects.reset();
+  calloutEl.classList.add('hidden');
+  calloutHideT = 0;
 }
 btnShare.addEventListener('click', async () => {
   const isLocal = mode === 'local';
   const w = isLocal ? local!.matchWinnerId : matchWinnerId;
   const src = isLocal ? local! : net!;
   const txt = w ? `${src.nicknameOf(w)} venceu no Octógono — sumô eletrônico! 🥋` : 'Empate no Octógono! 🥋';
-  try {
-    if ((navigator as any).share) await (navigator as any).share({ text: txt });
-    else {
-      await navigator.clipboard.writeText(txt);
-      btnShare.textContent = 'Copiado!';
-      setTimeout(() => (btnShare.textContent = 'Compartilhar'), 1500);
+  if ((navigator as any).share) {
+    try {
+      await (navigator as any).share({ text: txt });
+    } catch {
+      /* user cancelled the share sheet — ignore */
     }
+    return;
+  }
+  // No share sheet: copy to clipboard, and if even that's unavailable (insecure
+  // context / blocked), fall back to a prompt so the text is never unreachable.
+  try {
+    await navigator.clipboard.writeText(txt);
+    btnShare.textContent = 'Copiado!';
+    setTimeout(() => (btnShare.textContent = 'Compartilhar'), 1500);
   } catch {
-    /* user cancelled share — ignore */
+    prompt('Copie o texto:', txt);
   }
 });
 
@@ -405,11 +476,16 @@ function showEnd(): void {
   }
   const canAgain = isLocal ? true : net!.isHost;
   btnAgain.classList.toggle('hidden', !canAgain);
+  // A non-host can't restart — tell them what they're waiting on instead of
+  // leaving a bare screen with only "Menu".
+  endHint.classList.toggle('hidden', canAgain);
+  if (!canAgain) endHint.textContent = 'Aguardando o host reiniciar…';
   showScreen('end');
 }
 btnAgain.addEventListener('click', () => {
   if (mode === 'local' && local) {
     endShown = false;
+    resetMatchExtras();
     local.playAgain();
     showScreen('match');
   } else {
@@ -418,7 +494,8 @@ btnAgain.addEventListener('click', () => {
 });
 btnMenu.addEventListener('click', () => {
   if (mode === 'online') {
-    location.reload(); // cleanly leave the room
+    net?.close(); // suppress auto-reconnect, then cleanly leave the room
+    location.reload();
   } else {
     mode = null;
     local = null;
@@ -436,6 +513,13 @@ function loop(now: number): void {
   let dt = now - last;
   last = now;
   if (dt > 250) dt = 250;
+
+  // Callout auto-hide runs here (not just in render) so a callout raised off the
+  // match screen — e.g. the desktop keyboard legend on the home screen — clears.
+  if (calloutHideT && now > calloutHideT) {
+    calloutEl.classList.add('hidden');
+    calloutHideT = 0;
+  }
 
   // Fixed-step pump, capped so a post-stall catch-up can't burst past the
   // server's input rate limit (or over-run the local sim).
@@ -466,7 +550,7 @@ function loop(now: number): void {
           outcomeHaptic(e.kind, e.playerId, local!.playerId);
           eventSfx(e, local!.playerId);
           if (!tutorial) coreCallout(e, local!.playerId);
-          if (e.kind === 'eliminated' && !tutorial) slowmoUntil = now + 240;
+          if (e.kind === 'eliminated' && !tutorial && !settings.reducedMotion) slowmoUntil = now + 240;
           frameEvents.push(e);
         }
         acc -= STEP;
@@ -527,11 +611,6 @@ function render(now: number): void {
       showCallout('Fantasma! Ataque da borda');
     }
   }
-  if (calloutHideT && now > calloutHideT) {
-    calloutEl.classList.add('hidden');
-    calloutHideT = 0;
-  }
-
   renderer.draw(
     {
       discs,
@@ -558,9 +637,33 @@ if (!ONLINE_ENABLED) {
   document.getElementById('onlineSection')?.classList.add('hidden');
 }
 
+// Android hardware Back: unwind one screen at a time instead of quitting the app
+// mid-match. Settings open -> close it; end/lobby/match -> back to home; already
+// home -> let the app exit.
+function handleBack(): void {
+  if (!settingsModal.classList.contains('hidden')) {
+    closeSettings();
+    return;
+  }
+  if (!screens.home.classList.contains('hidden')) {
+    void exitApp();
+    return;
+  }
+  // Anywhere in a game flow: leave to the home menu (mirrors "Menu").
+  if (mode === 'online') {
+    net?.close();
+    location.reload();
+  } else {
+    mode = null;
+    local = null;
+    tutorial = null;
+    showScreen('home');
+  }
+}
+
 requestAnimationFrame(loop);
 showScreen('home');
-void initNative();
+void initNative(handleBack);
 
 function escapeHtml(s: string): string {
   return s.replace(

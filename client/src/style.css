@@ -7,7 +7,9 @@
   --perigo: #ff4d2e;
   --reflexo: #4dd8ff;
   --ink-2: #b0abbd;
-  --ink-3: #6d6880;
+  /* --ink-3 lightened from #6d6880 for WCAG AA (~4.5:1) on the dark backdrop —
+     it carries hints, placeholders, and secondary labels. */
+  --ink-3: #8f8aa3;
   --panel: rgba(22, 19, 28, 0.72);
   --line: rgba(245, 242, 232, 0.12);
   --display: 'Archivo Black', system-ui, sans-serif;
@@ -141,13 +143,17 @@ button {
 button:hover:not(:disabled) { background: rgba(245, 242, 232, 0.1); box-shadow: 0 0 0 1px var(--line); }
 button:active:not(:disabled) { transform: scale(0.97); }
 button:disabled { opacity: 0.35; cursor: not-allowed; }
+/* Keyboard focus ring — visible for tab users, absent for pointer/touch. */
+button:focus-visible, .seg button:focus-visible, .toggle:focus-within {
+  outline: 3px solid var(--reflexo); outline-offset: 2px;
+}
 button.primary {
   background: linear-gradient(135deg, #ff6a3d, #ff4d2e 60%, #e23417);
   border-color: transparent; color: #fff; letter-spacing: 0.1em;
   box-shadow: 0 10px 30px -8px rgba(255, 77, 46, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 button.primary:hover:not(:disabled) { filter: brightness(1.08); box-shadow: 0 14px 40px -8px rgba(255, 77, 46, 0.75); }
-button.ghost { border-color: var(--line); font-size: 12px; padding: 9px 16px; width: auto; letter-spacing: 0.1em;
+button.ghost { border-color: var(--line); font-size: 12px; padding: 9px 16px; min-height: 44px; width: auto; letter-spacing: 0.1em;
   background: rgba(245, 242, 232, 0.03); }
 .join { display: flex; gap: 8px; margin-top: 6px; }
 .join input { margin: 0; }
@@ -160,7 +166,7 @@ button.ghost { border-color: var(--line); font-size: 12px; padding: 9px 16px; wi
 .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--line); }
 .solo { display: flex; flex-direction: column; gap: 9px; }
 .seg { display: flex; gap: 6px; }
-.seg button { flex: 1; margin: 0; padding: 11px 8px; font-size: 12px; font-weight: 800; letter-spacing: 0.03em;
+.seg button { flex: 1; margin: 0; padding: 11px 8px; min-height: 44px; font-size: 12px; font-weight: 800; letter-spacing: 0.03em;
   background: rgba(9, 8, 12, 0.5); border: 1.5px solid var(--line); border-radius: 10px; }
 .seg button.on { border-color: var(--reflexo); background: rgba(77, 216, 255, 0.12); color: var(--marca);
   box-shadow: inset 0 0 0 1px rgba(77, 216, 255, 0.35); }
@@ -198,6 +204,22 @@ button.ghost { border-color: var(--line); font-size: 12px; padding: 9px 16px; wi
   animation: callout-in 0.3s ease both;
 }
 .callout.hidden { display: none; }
+
+/* connection-lost overlay — covers the frozen game while we auto-reconnect */
+.net-overlay {
+  position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center;
+  background: rgba(8, 7, 10, 0.82); backdrop-filter: blur(3px);
+}
+.net-overlay.hidden { display: none; }
+.net-card { display: flex; flex-direction: column; align-items: center; gap: 18px; padding: 32px; text-align: center; }
+.net-msg { font-family: var(--sans); font-weight: 600; font-size: 17px; color: var(--ink-1); max-width: 300px; }
+.net-spinner {
+  width: 40px; height: 40px; border-radius: 50%;
+  border: 3px solid rgba(245, 242, 232, 0.18); border-top-color: var(--marca);
+  animation: net-spin 0.9s linear infinite;
+}
+@keyframes net-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .net-spinner { animation-duration: 2.4s; } }
 @keyframes callout-in { from { opacity: 0; transform: translateX(-50%) translateY(-10px) scale(0.9); } to { opacity: 1; transform: translateX(-50%); } }
 .endscores { margin: 20px 0; display: flex; flex-direction: column; gap: 10px; font-size: 16px; font-family: var(--sans); font-weight: 600; }
 .endscores > div { display: flex; align-items: center; justify-content: center; gap: 8px; }
@@ -279,7 +301,7 @@ body.force-touch #hud, body.force-touch #tutorial:not(.hidden) { display: block 
 .tut-dot.on { background: var(--perigo); }
 .tut-skip {
   position: absolute; top: calc(env(safe-area-inset-top) + 12px); right: calc(env(safe-area-inset-right) + 14px);
-  pointer-events: auto; width: auto; margin: 0; padding: 8px 14px; font-size: 11px; letter-spacing: 0.08em;
+  pointer-events: auto; width: auto; margin: 0; padding: 10px 18px; min-height: 44px; font-size: 12px; letter-spacing: 0.08em;
   border-radius: 999px; border-color: rgba(245, 242, 232, 0.2); background: rgba(13, 11, 15, 0.7);
 }
 .tut-joyhint {
@@ -289,7 +311,7 @@ body.force-touch #hud, body.force-touch #tutorial:not(.hidden) { display: block 
 @keyframes joyhint { 0%, 100% { opacity: 0.5; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-6px); } }
 
 .link-btn {
-  width: auto; margin: 14px auto 0; padding: 6px 10px; border: none; background: none;
+  width: auto; margin: 14px auto 0; padding: 12px 14px; min-height: 44px; border: none; background: none;
   color: var(--ink-3); font-family: var(--mono); font-size: 12px; letter-spacing: 0.06em;
   text-transform: none; text-decoration: underline; text-underline-offset: 3px;
 }
@@ -298,7 +320,7 @@ body.force-touch #hud, body.force-touch #tutorial:not(.hidden) { display: block 
 /* ---------- settings ---------- */
 .gear {
   position: fixed; z-index: 12; top: calc(env(safe-area-inset-top) + 52px);
-  left: calc(env(safe-area-inset-left) + 12px); width: 42px; height: 42px; margin: 0; padding: 0;
+  left: calc(env(safe-area-inset-left) + 12px); width: 44px; height: 44px; margin: 0; padding: 0;
   border-radius: 50%; font-size: 20px; line-height: 1; border: 1px solid rgba(245, 242, 232, 0.16);
   background: rgba(13, 11, 15, 0.7); color: var(--marca); backdrop-filter: blur(6px);
 }
@@ -341,6 +363,10 @@ body.large-text .tag, body.large-text .explain { font-size: 15px; }
 body.large-text .tut-text { font-size: 16px; }
 body.large-text .btn .cap { font-size: 12px; }
 body.large-text .players li, body.large-text .toggle { font-size: 17px; }
+body.large-text .seg button { font-size: 14px; }
+body.large-text .hint, body.large-text .error, body.large-text .link-btn { font-size: 15px; }
+body.large-text button { font-size: 17px; }
+body.large-text .net-msg { font-size: 19px; }
 
 /* manual reduced-motion (mirrors the media query for the in-app toggle) */
 body.reduce-motion #bg .glow, body.reduce-motion #bg .oct, body.reduce-motion #bg .mote,
