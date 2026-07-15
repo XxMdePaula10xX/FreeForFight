@@ -7,7 +7,7 @@ import type { InputMap } from '../../shared/physics';
 import { makeDisc } from '../../shared/types';
 import type { InputCmd, SimState } from '../../shared/types';
 import { TUNING, REFLECT_ACTIVE_TICKS } from '../../shared/tuning';
-import { isInside } from '../../shared/octagon';
+import { isInside, outsideDepth } from '../../shared/octagon';
 
 let passed = 0;
 let failed = 0;
@@ -178,6 +178,22 @@ function snapshot(s: SimState): string {
     'charged push fires as a Super Empurrão',
   );
   assert(s.discs[0].coreChargeUntil === 0, 'super push consumes the charge');
+}
+
+// ---- 10. non-finite input can't corrupt the sim (grief-DoS guard) ----------
+{
+  const s = fresh(2);
+  const seq: InputMap = new Map([
+    ['a', input({ dir: { x: Infinity, y: 0 } })],
+    ['b', input({ dir: { x: NaN, y: NaN } })],
+  ]);
+  for (let i = 0; i < 5; i++) step(s, seq, 1 / 60);
+  for (const d of s.discs) {
+    assert(Number.isFinite(d.pos.x) && Number.isFinite(d.pos.y), 'non-finite dir never corrupts position');
+    assert(Number.isFinite(d.vel.x) && Number.isFinite(d.vel.y), 'non-finite dir never corrupts velocity');
+  }
+  // a genuinely non-finite point must read as outside (un-eliminable-disc guard)
+  assert(outsideDepth({ x: NaN, y: 0 }, 340) >= 0, 'a NaN point is treated as outside the arena');
 }
 
 // ---- report ----------------------------------------------------------------

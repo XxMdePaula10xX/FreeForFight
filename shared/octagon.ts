@@ -31,6 +31,9 @@ export function isInside(p: Vec2, circumradius: number): boolean {
 // Signed "how far outside" — max over edges of (dot(p,n) - apothem).
 // Negative means inside; >= 0 means eliminated.
 export function outsideDepth(p: Vec2, circumradius: number): number {
+  // A non-finite point (NaN/Infinity) is treated as outside — otherwise a
+  // corrupted disc would be un-eliminable and could brick a round.
+  if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) return Infinity;
   const a = apothem(circumradius);
   let max = -Infinity;
   for (const n of EDGE_NORMALS) {

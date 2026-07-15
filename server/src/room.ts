@@ -241,6 +241,12 @@ export class Room {
   }
 
   private endRound(winnerId: string | null): void {
+    // A disconnected player's idle disc must not win a round (3-4p case where
+    // the connected players fall first). Treat that outcome as a draw.
+    if (winnerId) {
+      const w = this.players.get(winnerId);
+      if (!w || !w.connected) winnerId = null;
+    }
     if (winnerId) {
       const w = this.players.get(winnerId);
       if (w) w.score++;

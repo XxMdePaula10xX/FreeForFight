@@ -41,9 +41,16 @@ export class GameLoop {
     this.frame++;
     const sendSnapshots = this.frame % SNAPSHOT_EVERY === 0;
     for (const room of this.rooms.values()) {
-      room.advance();
-      room.flushEvents();
-      if (sendSnapshots) room.sendSnapshots();
+      // Isolate rooms: a throw in one room's tick must not stop the loop or
+      // take down every other live match.
+      try {
+        room.advance();
+        room.flushEvents();
+        if (sendSnapshots) room.sendSnapshots();
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error(`room ${room.code} tick error:`, err);
+      }
     }
     if (this.frame % 60 === 0) this.reap(now);
   }

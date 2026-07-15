@@ -18,7 +18,8 @@ export const dist = (a: Vec2, b: Vec2): number => Math.hypot(a.x - b.x, a.y - b.
 
 export const normalize = (a: Vec2): Vec2 => {
   const l = Math.hypot(a.x, a.y);
-  if (l < 1e-9) return { x: 0, y: 0 };
+  // guard against non-finite input (l NaN/Infinity) — never emit NaN downstream
+  if (!(l > 1e-9) || !Number.isFinite(l)) return { x: 0, y: 0 };
   return { x: a.x / l, y: a.y / l };
 };
 

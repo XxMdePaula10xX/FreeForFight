@@ -11,6 +11,7 @@ import { GameLoop } from './loop';
 import { Room } from './room';
 import type { ClientMessage } from '../../shared/protocol';
 import { encode, decode } from '../../shared/protocol';
+import { TUNING } from '../../shared/tuning';
 
 const PORT = Number(process.env.PORT ?? 8787);
 const MAX_ROOMS = 100;
@@ -39,7 +40,39 @@ interface Conn {
   socket: WebSocket;
   playerId: string | null;
   roomCode: string | null;
-  inputTimes: number[]; // sliding window for rate limiting
+  inputTimes: number[]; // sliding window for input rate limiting
+  controlTimes: number[]; // sliding window for control-message rate limiting
+}
+
+const MAX_CONTROL_PER_SEC = 20; // create/join/start/etc — generous but bounded
+const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+const isStr = (v: unknown): v is string => typeof v === 'string';
+
+// Validate a decoded client message at the trust boundary. Never trust the wire.
+function validClientMessage(m: unknown): m is ClientMessage {
+  if (!m || typeof m !== 'object') return false;
+  const msg = m as Record<string, unknown>;
+  switch (msg.t) {
+    case 'create_room':
+      return isStr(msg.nickname);
+    case 'join_room':
+      return isStr(msg.nickname) && isStr(msg.code);
+    case 'reconnect':
+      return isStr(msg.playerId) && isStr(msg.code);
+    case 'start_match':
+    case 'play_again':
+      return true;
+    case 'input':
+      return (
+        isNum(msg.seq) &&
+        typeof msg.push === 'boolean' &&
+        typeof msg.reflect === 'boolean' &&
+        !!msg.dir &&
+        typeof msg.dir === 'object'
+      );
+    default:
+      return false;
+  }
 }
 
 // Serve the built client (client/dist) so this is a single deployable service.
@@ -57,7 +90,15 @@ const MIME: Record<string, string> = {
 
 async function serveStatic(urlPath: string, res: import('http').ServerResponse): Promise<void> {
   // strip query, prevent path traversal, default to index.html (SPA)
-  let rel = decodeURIComponent(urlPath.split('?')[0]);
+  let rel: string;
+  try {
+    rel = decodeURIComponent(urlPath.split('?')[0]);
+  } catch {
+    // malformed percent-encoding (e.g. `/%`) — reject instead of crashing
+    res.writeHead(400, { 'content-type': 'text/plain' });
+    res.end('Bad request');
+    return;
+  }
   if (rel === '/' || rel === '') rel = '/index.html';
   const safe = normalize(rel).replace(/^(\.\.[/\\])+/, '');
   const full = join(CLIENT_DIST, safe);
@@ -90,16 +131,23 @@ const server = createServer((req, res) => {
 const wss = new WebSocketServer({ server });
 
 wss.on('connection', (socket) => {
-  const conn: Conn = { socket, playerId: null, roomCode: null, inputTimes: [] };
+  const conn: Conn = { socket, playerId: null, roomCode: null, inputTimes: [], controlTimes: [] };
 
   socket.on('message', (data) => {
-    let msg: ClientMessage;
+    let msg: unknown;
     try {
-      msg = decode<ClientMessage>(data.toString());
+      msg = decode<unknown>(data.toString());
     } catch {
-      return;
+      return; // not JSON — drop
     }
-    handleMessage(conn, msg);
+    if (!validClientMessage(msg)) return; // malformed — drop, never crash
+    // Never let one bad message take down the process (and every live room).
+    try {
+      handleMessage(conn, msg);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('handleMessage error:', err);
+    }
   });
 
   socket.on('close', () => {
@@ -124,9 +172,14 @@ function sendError(conn: Conn, message: string): void {
 }
 
 function handleMessage(conn: Conn, msg: ClientMessage): void {
+  // Rate-limit control messages (create/join/etc) so one socket can't spam-create
+  // rooms and exhaust the cap. Inputs have their own limiter.
+  if (msg.t !== 'input' && !allowControl(conn)) return;
+
   switch (msg.t) {
     case 'create_room': {
       if (loop.roomCount >= MAX_ROOMS) return sendError(conn, 'Servidor lotado. Tente mais tarde.');
+      leaveCurrentRoom(conn); // abandon any prior room so it doesn't leak
       const code = freshCode();
       const room = new Room(code, Date.now());
       loop.rooms.set(code, room);
@@ -136,10 +189,11 @@ function handleMessage(conn: Conn, msg: ClientMessage): void {
     case 'join_room': {
       const room = loop.rooms.get(msg.code.toUpperCase());
       if (!room) return sendError(conn, 'Sala não encontrada.');
-      if (room.players.size >= 4) return sendError(conn, 'Sala cheia.');
+      if (room.players.size >= TUNING.match.maxPlayers) return sendError(conn, 'Sala cheia.');
       if (room.phase !== 'lobby' && room.phase !== 'match_end') {
         return sendError(conn, 'A partida já começou.');
       }
+      leaveCurrentRoom(conn); // abandon any prior room so it doesn't leak
       joinRoom(conn, room, msg.nickname);
       break;
     }
@@ -173,9 +227,11 @@ function handleMessage(conn: Conn, msg: ClientMessage): void {
       const room = requireRoom(conn);
       if (!room || !conn.playerId) return;
       if (!allowInput(conn)) return; // rate limit
+      // Sanitize dir at the trust boundary: a non-finite component would seed
+      // NaN into the deterministic sim and create an un-eliminable disc.
       room.setInput(conn.playerId, {
         seq: msg.seq,
-        dir: msg.dir,
+        dir: { x: isNum(msg.dir.x) ? msg.dir.x : 0, y: isNum(msg.dir.y) ? msg.dir.y : 0 },
         push: msg.push,
         reflect: msg.reflect,
       });
@@ -211,6 +267,39 @@ function allowInput(conn: Conn): boolean {
   while (win.length && now - win[0] > 1000) win.shift();
   return win.length <= MAX_INPUTS_PER_SEC;
 }
+
+function allowControl(conn: Conn): boolean {
+  const now = Date.now();
+  const win = conn.controlTimes;
+  win.push(now);
+  while (win.length && now - win[0] > 1000) win.shift();
+  return win.length <= MAX_CONTROL_PER_SEC;
+}
+
+// Remove this connection from whatever room it was in, so abandoned rooms can
+// be reaped instead of pinning the 100-room cap forever.
+function leaveCurrentRoom(conn: Conn): void {
+  if (conn.roomCode && conn.playerId) {
+    const room = loop.rooms.get(conn.roomCode);
+    if (room && room.isCurrentSocket(conn.playerId, conn.socket)) {
+      room.removePlayer(conn.playerId);
+      room.broadcastRoomState();
+    }
+  }
+  conn.roomCode = null;
+  conn.playerId = null;
+}
+
+// Defense in depth: never let an unexpected throw/rejection kill the process
+// and drop every live match. (The message and tick paths are already guarded.)
+process.on('uncaughtException', (err) => {
+  // eslint-disable-next-line no-console
+  console.error('uncaughtException:', err);
+});
+process.on('unhandledRejection', (reason) => {
+  // eslint-disable-next-line no-console
+  console.error('unhandledRejection:', reason);
+});
 
 server.listen(PORT, () => {
   // eslint-disable-next-line no-console
